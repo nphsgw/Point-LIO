@@ -29,7 +29,7 @@ C++14 / ROS1(catkin)/ Eigen3 / PCL 1.8 / OpenMP(任意)。READMEの動作確認�
 
 | 操作 | 実行場所 | コマンド・参照先 | 前提条件 | 使わないもの(理由) |
 | --- | --- | --- | --- | --- |
-| ビルド(C++) | catkin ワークスペース | `catkin_make`([README](README.md) の Build 節) | ROS noetic、livox_ros_driver を source 済み | 【記入】 |
+| ビルド(C++) | リポジトリ直下(Docker) | 初回のみ `docker build -t point-lio-noetic -f docker/Dockerfile docker`。ビルドは `docker run --rm -v "$PWD":/ws/src/point_lio:ro point-lio-noetic bash -c '. /opt/ros/noetic/setup.sh && . /ws/devel/setup.sh && cd /ws && catkin_make'` | Docker。イメージに ROS noetic・glog・livox_ros_driver 入り | ホスト直での `catkin_make`(ホストは noetic 環境ではない)。成果物は `--rm` で消える |
 | 実行(C++) | 同上 | `roslaunch point_lio mapping_<sensor>.launch` | bag 再生またはドライバ | 【記入】 |
 | サニタイザ付きビルド | 【記入】 | 【記入】 | 【記入】 | 【記入】 |
 | ゴールデン出力の検証 | 【記入】 | 【記入】 | 【記入】 | 【記入】 |
