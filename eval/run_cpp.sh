@@ -2,7 +2,9 @@
 # C++ 版(A/B)を bag 1本に対して実行し、姿勢列を TUM 形式で出力する。動作確認・軌跡取得用。
 # 使い方: eval/run_cpp.sh <avia-quick-shack|ouster-nc-quad-easy> <出力ディレクトリ> [イメージ]
 # 環境変数: DATA_DIR(既定 ~/data/slamrun)、NO_BUILD=1(イメージ内の /ws/devel を使い catkin_make を省く。
-#           ビルド済みイメージ用)、MP_PROC_NUM(スレッド数。未指定なら既定値)
+#           ビルド済みイメージ用)
+# スレッド数(MP_PROC_NUM)は CMakeLists.txt がビルド時に nproc から決める定義で、実行時には変えられない。
+# 使われた値は出力先の build.log("core for MP" の行。表示は 3 でも定義値は 4 のことがある)で確認する。
 # 再生は実時間(rosbag play)。性能の数値には使わない(docs/metrics-preregistration.md)。
 set -euo pipefail
 
@@ -29,12 +31,11 @@ mkdir -p "$out"; out=$(cd "$out" && pwd)
   echo "image=$image"; echo "image_id=$(docker image inspect -f '{{.Id}}' "$image")"
   echo "git_head=$(git -C "$repo" rev-parse HEAD)"
   echo "git_dirty=$(git -C "$repo" status --porcelain | wc -l)"
-  echo "mp_proc_num=${MP_PROC_NUM:-default}"; echo "no_build=${NO_BUILD:-0}"
+  echo "no_build=${NO_BUILD:-0}"
 } > "$out/meta.txt"
 
 docker run --rm \
   -e ID="$id" -e BAG="/data/$bag" -e LAUNCH="$launch" -e NO_BUILD="${NO_BUILD:-0}" \
-  ${MP_PROC_NUM:+-e MP_PROC_NUM="$MP_PROC_NUM"} \
   -v "$repo":/ws/src/point_lio:ro -v "$data":/data:ro -v "$out":/out \
   "$image" bash -c '
     set -eo pipefail
