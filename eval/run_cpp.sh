@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # C++ 版(A/B)を bag 1本に対して実行し、姿勢列を TUM 形式で出力する。動作確認・軌跡取得用。
+# 出力: traj.tum、cloud.bag(/cloud_registered の記録)、meta.txt、各ログ。
 # 使い方: eval/run_cpp.sh <avia-quick-shack|ouster-nc-quad-easy> <出力ディレクトリ> [イメージ]
 # 環境変数: DATA_DIR(既定 ~/data/slamrun)、NO_BUILD=1(イメージ内の /ws/devel を使い catkin_make を省く。
 #           ビルド済みイメージ用)
@@ -54,11 +55,14 @@ docker run --rm \
     until rosnode list 2>/dev/null | grep -q laserMapping; do sleep 0.5; done
     sleep 3
     rosbag record -q -O /out/odom.bag /aft_mapped_to_init > /dev/null 2>&1 &
+    # 地図(Chamfer 距離)の基準用。publish_frame_world が毎フレーム発行するワールド点
+    rosbag record -q -O /out/cloud.bag /cloud_registered > /dev/null 2>&1 &
     sleep 2
     rosbag play -q "$BAG"
     sleep 5
     pkill -INT -f "rosbag record"; sleep 2
     pkill -INT -f "roslaunch" || true; sleep 2
+    test -s /out/cloud.bag
     python3 /ws/src/point_lio/eval/odom_to_tum.py /out/odom.bag /aft_mapped_to_init /out/traj.tum
   '
 echo "done: $out/traj.tum"
