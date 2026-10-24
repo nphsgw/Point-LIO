@@ -1,0 +1,4 @@
+# config/ouster64.yaml への上書き。Newer College の Ouster は OS0-128。
+# 外部パラメータは ouster64.yaml の単位行列のまま(Newer College の LiDAR-IMU 外部パラメータは未使用)。
+preprocess:
+    scan_line: 128

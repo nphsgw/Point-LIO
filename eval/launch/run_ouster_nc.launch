@@ -1,0 +1,8 @@
+<launch>
+<!-- 評価用: mapping_ouster64.launch を rviz 無しで起動し、OS0-128 用の上書きを後から読む。
+     後から読んだ rosparam が優先されるので、既存の config/ouster64.yaml は変えない。 -->
+	<include file="$(find point_lio)/launch/mapping_ouster64.launch">
+		<arg name="rviz" value="false" />
+	</include>
+	<rosparam command="load" ns="laserMapping" file="$(find point_lio)/eval/config/ouster_os0128.yaml" />
+</launch>

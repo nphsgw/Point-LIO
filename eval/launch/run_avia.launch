@@ -1,0 +1,6 @@
+<launch>
+<!-- 評価用: mapping_avia.launch を rviz 無しで起動する -->
+	<include file="$(find point_lio)/launch/mapping_avia.launch">
+		<arg name="rviz" value="false" />
+	</include>
+</launch>
