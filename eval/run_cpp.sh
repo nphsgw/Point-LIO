@@ -3,7 +3,7 @@
 # 出力: traj.tum、cloud.bag(/cloud_registered の記録)、meta.txt、各ログ。
 # 使い方: eval/run_cpp.sh <avia-quick-shack|ouster-nc-quad-easy> <出力ディレクトリ> [イメージ]
 # 環境変数: DATA_DIR(既定 ~/data/slamrun)、NO_BUILD=1(イメージ内の /ws/devel を使い catkin_make を省く。
-#           ビルド済みイメージ用)
+#           ビルド済みイメージ用)、PLAY_RATE(既定 1。rosbag play -r に渡す。決定性の確認用)
 # スレッド数(MP_PROC_NUM)は CMakeLists.txt がビルド時に nproc から決める定義で、実行時には変えられない。
 # 使われた値は出力先の build.log("core for MP" の行。表示は 3 でも定義値は 4 のことがある)で確認する。
 # 再生は実時間(rosbag play)。性能の数値には使わない(docs/metrics-preregistration.md)。
@@ -33,10 +33,12 @@ mkdir -p "$out"; out=$(cd "$out" && pwd)
   echo "git_head=$(git -C "$repo" rev-parse HEAD)"
   echo "git_dirty=$(git -C "$repo" status --porcelain | wc -l)"
   echo "no_build=${NO_BUILD:-0}"
+  echo "play_rate=${PLAY_RATE:-1}"
 } > "$out/meta.txt"
 
 docker run --rm \
   -e ID="$id" -e BAG="/data/$bag" -e LAUNCH="$launch" -e NO_BUILD="${NO_BUILD:-0}" \
+  -e PLAY_RATE="${PLAY_RATE:-1}" \
   -v "$repo":/ws/src/point_lio:ro -v "$data":/data:ro -v "$out":/out \
   "$image" bash -c '
     set -eo pipefail
@@ -58,7 +60,7 @@ docker run --rm \
     # 地図(Chamfer 距離)の基準用。publish_frame_world が毎フレーム発行するワールド点
     rosbag record -q -O /out/cloud.bag /cloud_registered > /dev/null 2>&1 &
     sleep 2
-    rosbag play -q "$BAG"
+    rosbag play -q -r "$PLAY_RATE" "$BAG"
     sleep 5
     pkill -INT -f "rosbag record"; sleep 2
     pkill -INT -f "roslaunch" || true; sleep 2
