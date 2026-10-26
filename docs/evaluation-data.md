@@ -36,10 +36,26 @@ bag から `eval/extract_input.py`(`add3cf1`)で作る、ファイル駆動の�
 | ID | 条件 | センサ | 状態 | SHA256 | 正解 |
 | --- | --- | --- | --- | --- | --- |
 | ncd-maths-hard | 激しい運動(最速の歩行、速い回転と揺れ、無特徴の面)。243 s | Ouster OS0-128(開発用の ouster-nc-quad-easy と同じ機材) | **未取得**。Newer College の配布ページのフォームから申し込む必要がある(CC BY-NC-SA 4.0) | 未記録 | 有無は取得時に確認 |
-| glim-flatwall-01〜08 | 完全な退化(平らな壁だけを見る) | Livox Avia | 取得済み(下の節) | `~/data/slamrun/flatwall/sha256.txt` | `gt.tar.gz`(AprilTag を見るカメラから求めた軌跡)。中身は見ていない |
+| glim-flatwall-01〜08 | 完全な退化(平らな壁だけを見る) | Livox Avia | 取得済み(下の節) | 下の節 | `gt.tar.gz`(AprilTag を見るカメラから求めた軌跡)。中身は見ていない |
 
 選定の経緯:
 
 - 激しい運動には、初め Newer College の quad-hard(手元にある)を選んだ。しかし別プロジェクト slamrun に、Point-LIO の別の版・別の設定で quad_hard・quad_medium・stairs を走らせた ATE の記録があり、2026-10-26 にそれを見た。そのため quad-hard を外し、slamrun で使われていない maths-hard に差し替えた。
 - stairs(退化に近い)と park(長時間)も候補だったが、人の判断で選ばなかった(stairs は、その後に slamrun での使用歴も分かった)。長時間の条件は最終評価用にない。
 - maths-hard と Flatwall の使用歴は、slamrun のリポジトリ(`results/` と記録の文書)に見当たらなかった(ファイル名と本文の検索による)。
+
+### Flatwall の取得記録
+
+Zenodo record 7641866("LiDAR Degeneration Test Dataset (Flatwall experiment)"、CC BY 4.0)から 2026-10-26 に取得し、配布元の MD5 と全ファイル一致を確かめた。置き場所は `~/data/slamrun/flatwall`(リポジトリに含めない)。`flatwall_04.bag` は1回目の転送が途中で切れたので取り直した。中身(`rosbag info` を含む)は見ていない。
+
+| ファイル | サイズ | SHA256 |
+| --- | --- | --- |
+| `gt.tar.gz` | 213,710 B | `b2c457f95fdae05af07732a60294762c55567e21e6548977b235ebf415d6a9d9` |
+| `flatwall_01.bag` | 184,597,802 B | `4721e667166e11b948aea83b221f99ca0fec21fabdce5b292662a4b442efbab6` |
+| `flatwall_02.bag` | 135,975,445 B | `1786d134dc30112f9b52b9a20a6456d0d6a0307bc747eee5cae2b60561e9040c` |
+| `flatwall_03.bag` | 143,913,789 B | `f2aacfd0b59e4f95b4567f70bde3c3789479143d9399c729ab40be7d3fdae714` |
+| `flatwall_04.bag` | 131,013,599 B | `fa0a26541bb61a1bb041add42ba66c83d53f853a4cf3748f5aee4705d8ac70e5` |
+| `flatwall_05.bag` | 139,946,903 B | `ac668922813bb523a56309c7a0b585958eba81e0897dea711e9a04a25b4ddf8e` |
+| `flatwall_06.bag` | 88,340,047 B | `933afb11da1d03e1e68f24498f15cfb1654b55ff02dac8f2251c1bf4e004aa67` |
+| `flatwall_07.bag` | 89,331,959 B | `66a1d7b1d8417c9883e7a8d3227310647492c5b32c0b373d1a22616b9b758308` |
+| `flatwall_08.bag` | 121,088,764 B | `da765f673da9d050c0a3a64d33a47669c5d0d47d4b171ca64fb2c9f57beff751` |
