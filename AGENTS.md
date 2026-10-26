@@ -4,11 +4,12 @@
 
 Point-LIO(LiDAR-慣性オドメトリ。本リポジトリは grid-map 付きの fork)を Rust で再実装し、精度・性能・安全性がどれだけ変わるかを測る検証プロジェクト。全体計画は [docs/rust-reimplementation-verification-plan.md](docs/rust-reimplementation-verification-plan.md)。
 
-比較は3系統で行う。A→B の差がバグ修正の効果、B→C の差が言語・実装の効果。A→C を直接比べない。
+比較は A→B、B→C、C→D で行う。A→B の差がバグ修正の効果、B→C の差が移植の効果(言語・数値ライブラリ・メモリ配置・探索順を含む。言語だけの効果とは言わない)、C→D の差が設計変更・最適化の効果。A→C を直接比べない。
 
-- A: 現状の C++(as-is)
-- B: C++ でバグ修正したもの
-- C: Rust 実装
+- A: 現状の C++(上流 `4b86a46` + 挙動を変えないハーネス化。タグ `A-v1`)
+- B: C++ でバグ修正したもの(台帳で承認された修正だけ。メモリ/UB 系も含む)
+- C: Rust 実装(B のアルゴリズム・演算順・スレッド構成を保つ)
+- D: C を改良した Rust(C の完成後にだけ作る)
 
 ## 技術スタックと構成
 
@@ -31,7 +32,7 @@ bag は `~/data/slamrun`、ハーネスの入力ファイルは `~/data/slamrun-
 
 | 操作 | 実行場所 | コマンド・参照先 | 前提条件 | 使わないもの(理由) |
 | --- | --- | --- | --- | --- |
-| ビルド(C++) | リポジトリ直下(Docker) | 初回のみ `docker build -t point-lio-noetic -f docker/Dockerfile docker`。ビルドは `docker run --rm -v "$PWD":/ws/src/point_lio:ro point-lio-noetic bash -c '. /opt/ros/noetic/setup.sh && . /ws/devel/setup.sh && cd /ws && catkin_make'` | Docker。イメージに ROS noetic・glog・livox_ros_driver 入り | ホスト直での `catkin_make`(ホストは noetic 環境ではない)。成果物は `--rm` で消える |
+| ビルド(C++) | リポジトリ直下(Docker) | 初回のみ `docker build -t point-lio-noetic -f docker/Dockerfile docker` と `docker/check_packages.sh`(全パッケージの版を `docker/packages.lock` と照合)。ビルドは `docker run --rm -v "$PWD":/ws/src/point_lio:ro point-lio-noetic bash -c '. /opt/ros/noetic/setup.sh && . /ws/devel/setup.sh && cd /ws && catkin_make'` | Docker。イメージに ROS noetic・glog・livox_ros_driver 入り | ホスト直での `catkin_make`(ホストは noetic 環境ではない)。成果物は `--rm` で消える |
 | 実行(C++) | リポジトリ直下 | `eval/run_cpp.sh <avia-quick-shack\|ouster-nc-quad-easy> <出力ディレクトリ>`(ビルド・bag 再生・記録・TUM 変換まで。出力は `traj.tum`、`cloud.bag`、`meta.txt`、各ログ。決定性の確認用に環境変数 `PLAY_RATE`・`RVIZ=1`) | Docker イメージ `point-lio-noetic:latest`、bag が `~/data/slamrun`(SHA256 不一致なら中止) | `mapping_<sensor>.launch` の直接実行(rviz が起動する。Ouster は `scan_line` が 64 のままで OS0-128 に合わない)。実時間再生なので性能の数値には使わない |
 | 入力ファイルの作成 | リポジトリ直下(Docker) | `docker run --rm -v "$PWD":/ws/src/point_lio:ro -v ~/data/slamrun:/data:ro -v ~/data/slamrun-input:/input point-lio-noetic bash -c '. /opt/ros/noetic/setup.sh && . /ws/devel/setup.sh && python3 /ws/src/point_lio/eval/extract_input.py /data/<bag> /ws/src/point_lio/eval/config/canonical/<ID>.yaml /input/<ID>.plin'` | bag の SHA256 一致。作成後に SHA256 を docs/evaluation-data.md と照合 | — |
 | 実行(ファイル駆動) | リポジトリ直下 | `eval/run_offline.sh <ID> <出力ディレクトリ>`(ビルドと `pointlio_offline` の実行。出力は `traj.tum`、`odom.bin`、`cloud.bin` など。形式は src/offline_output.h) | 入力ファイルが `~/data/slamrun-input`(SHA256 不一致なら中止) | — |
