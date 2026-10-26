@@ -148,7 +148,7 @@ B 全体の完成は移植の前提にしない。範囲ごとに上の5つを�
 | 1. 評価データ | 開発用の2本は完了([evaluation-data.md](evaluation-data.md))。最終評価用は maths-hard(未取得)と Flatwall(取得済み)を選び、封印の規則を記録した(2026-10-26) |
 | 2. 実行ハーネス | 実装と T1〜T14 まで完了(2026-10-26)。`pointlio_offline` の出力は、改造前の ROS 経路とビット一致した。差分の別セッションでのレビューが残る([ros-free-harness.md](../agents/plans/ros-free-harness.md) §10) |
 | 3. 事前登録 | 承認済み([metrics-preregistration.md](metrics-preregistration.md))。2026-10-26 に2回改訂。2回目で B→C の判定を J1〜J6 に組み替え、スレッド数を `OMP_NUM_THREADS` の記録に改めた(別レビュー3回、[改訂案](metrics-preregistration-revision-proposal.md))。付録(範囲ごとの基準)は未登録 |
-| 4. A のベースライン | 未着手。V0 はファイル駆動の10回(T7・T9)、V1 相当は ROS 経路の代理実験のみ([fp-order-sensitivity.md](fp-order-sensitivity.md))。V2〜V4 は未実行 |
+| 4. A のベースライン | 精度と感度分析を実施(2026-10-26、[a-baseline.md](a-baseline.md))。V0〜V4 とも変種の中でビット一致。τ(ATE)は avia 1.0e-01 m、ouster 8.7e-03 m。ouster の正解に対する ATE は 0.0694〜0.0704 m。性能の計測と RPE 1 s は未実施 |
 | 5. 再現性と判定の道具 | 実施(2026-10-26)。タグ `A-v1`、Dockerfile の固定と `docker/packages.lock`・`docker/check_packages.sh`、メタデータの拡張、`tests/harness/venv.lock`、T7・T8 の修正と注入による確認、台帳。固定した Dockerfile で作り直したイメージ(`point-lio-noetic:pinned`、全パッケージが lock と一致)で、各 bag 1回ずつ T7・T8・T10・T12・T14 が通過し、姿勢・点群とも基準とビット一致した(2026-10-26。記録は `~/data/slamrun-runs/pinned`)。これは未コミットの作業ツリー(`git_dirty=12`、差分は各出力の `git_diff.patch`。C++ のソースは `A-v1` と同じ)での実行で、コミット後の `c8b197a`・`git_dirty=0` でも同じく全項目が通過し、ビット一致した(記録は `~/data/slamrun-runs/clean-c8b197a`) |
 | 6. トレース・状態の定義・入力生成器・性能・サニタイザ | 状態の定義の文書の草案([state-definition.md](state-definition.md)、コードを読んで作成、レビュー未実施)。ほかは未着手。サニタイザはビルドの成立のみ確認済みで、実行は未検証 |
 
@@ -248,6 +248,6 @@ B 全体の完成は移植の前提にしない。範囲ごとに上の5つを�
 
 1. 状態の定義の文書([state-definition.md](state-definition.md))のレビューと、トレースの仕様(§5)
 2. 数学と状態の表現の L1 テストとゴールデン出力。付録への (a, r) の登録
-3. フェーズ0の項目4(A の V0〜V4)。(a, r) を登録する前に1ステップの差を測る場合は、付録に開示する
+3. 性能の計測の仕組み(フェーズ0の項目6)。A の性能を測る
 4. 最終評価用のデータ: maths-hard の取得(配布ページのフォームから申し込む)と封印
 5. 台帳: BL-002・BL-006 の再現の試み、BL-001・BL-007 の B での修正
