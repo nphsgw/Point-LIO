@@ -115,7 +115,7 @@ def metrics_of(ref, est):
 
 
 def compare_to_baseline(bag, base, runs):
-    """T7・T8 共通: 丸めのない一致と、tau_harness 以下かを判定する"""
+    """T7・T8 共通: 丸めのない一致と、tau_harness 以下か、姿勢の件数と時刻が基準と一致するかを判定する"""
     base_rows, base_hash = odom_records(base)
     base_traj = traj(base)
     if not runs:
@@ -132,6 +132,13 @@ def compare_to_baseline(bag, base, runs):
               " ".join("%s=%.3e" % kv for kv in m.items())))
         if over:
             fail("%s exceeds tau_harness in %s (first differing pose %s)" % (d, over, first))
+        # evo は 0.01 s 以内の時刻差を対応づけ、片方にしかない姿勢を捨てるので、件数と時刻はここで照合する
+        if len(rows) != len(base_rows):
+            fail("%s pose count %d differs from baseline %d" % (d, len(rows), len(base_rows)))
+        stamp = next((i for i, (a, b) in enumerate(zip(rows, base_rows)) if a[0] != b[0]), None)
+        if stamp is not None:
+            fail("%s stamp differs from baseline at pose %d (%d ns vs %d ns)" % (
+                d, stamp, rows[stamp][0], base_rows[stamp][0]))
 
 
 def t9(bag, runs):

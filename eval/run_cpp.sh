@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # C++ 版(A/B)を bag 1本に対して実行し、姿勢列を TUM 形式で出力する。動作確認・軌跡取得用。
-# 出力: traj.tum、cloud.bag(/cloud_registered の記録)、meta.txt、各ログ。
+# 出力: traj.tum、cloud.bag(/cloud_registered の記録)、meta.txt、git_diff.patch、git_status.txt、各ログ。
 # 使い方: eval/run_cpp.sh <avia-quick-shack|ouster-nc-quad-easy> <出力ディレクトリ> [イメージ]
 # 環境変数: DATA_DIR(既定 ~/data/slamrun)、NO_BUILD=1(イメージ内の /ws/devel を使い catkin_make を省く。
 #           ビルド済みイメージ用)、PLAY_RATE(既定 1。rosbag play -r に渡す。決定性の確認用)、
@@ -42,7 +42,11 @@ mkdir -p "$out"; out=$(cd "$out" && pwd)
   echo "rviz=${RVIZ:-0}"
   echo "extra_cxx_flags=${EXTRA_CXX_FLAGS:-}"
   echo "omp_num_threads=${OMP_NUM_THREADS:-unset}"
+  echo "cpu=$(LC_ALL=C lscpu | sed -n 's/^Model name: *//p')"
 } > "$out/meta.txt"
+# git_dirty は変更のあるファイルの数。差分そのもの(未追跡のファイルは一覧だけ)を残す
+git -C "$repo" diff HEAD > "$out/git_diff.patch"
+git -C "$repo" status --porcelain > "$out/git_status.txt"
 
 if [ -n "${EXTRA_CXX_FLAGS:-}" ] && [ "${NO_BUILD:-0}" = 1 ]; then
   echo "EXTRA_CXX_FLAGS needs a build; unset NO_BUILD" >&2; exit 2
@@ -65,6 +69,7 @@ docker run --rm \
     set -eo pipefail
     . /opt/ros/noetic/setup.sh
     cd /ws
+    echo "compiler=$(c++ --version | head -1)" >> /out/meta.txt
     if [ "$NO_BUILD" != 1 ]; then
       . /ws/devel/setup.sh
       # イメージの /ws/build は livox_ros_driver だけのホワイトリストを持つので、空にしないと本体が建たない
