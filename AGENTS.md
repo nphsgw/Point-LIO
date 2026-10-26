@@ -26,7 +26,7 @@ C++14 / ROS1(catkin)/ Eigen3 / PCL 1.8 / OpenMP(任意)。READMEの動作確認�
 | docs/ | 計画・仕様 |
 | agents/ | 開発ルール・手順・移植ごとのプラン |
 
-bag は `~/data/slamrun`、ハーネスの入力ファイルは `~/data/slamrun-input`、実行結果は `~/data/slamrun-runs`(いずれもリポジトリ外。[docs/evaluation-data.md](docs/evaluation-data.md))。Rust 実装・ゴールデン出力の置き場所は、作成時に追記する。
+bag は `~/data/slamrun`、ハーネスの入力ファイルは `~/data/slamrun-input`、実行結果は `~/data/slamrun-runs`(いずれもリポジトリ外。[docs/evaluation-data.md](docs/evaluation-data.md))。ゴールデン出力は golden/(数学と状態の表現は golden/math)。Rust 実装の置き場所は、作成時に追記する。
 
 ## 主要コマンド
 
@@ -39,7 +39,7 @@ bag は `~/data/slamrun`、ハーネスの入力ファイルは `~/data/slamrun-
 | ハーネスのテスト | リポジトリ直下 | 抽出 `tests/harness/run_extract_tests.sh`(T1〜T4)、C++ `tests/harness/run_cpp_tests.sh`(T5・T6・T13)、設定 `tests/harness/run_t11.sh <ID> <run_offline の出力>`、結合 `~/clone/slamrun/.venv/bin/python -I tests/harness/check_runs.py <t7\|t8\|t9\|t10\|t12\|t14> ...`(引数はファイル先頭の説明) | 入力ファイル、bag、作業用 venv(evo 1.37.1・rosbags・scipy) | — |
 | 数学の L1 テスト | リポジトリ直下(Docker) | `tests/math/run_math_tests.sh`(gtest の引数を渡せる。無効にしたテストは `--gtest_also_run_disabled_tests`) | Docker イメージ(libgtest-dev 入り) | — |
 | サニタイザ付きビルド(ASan+UBSan) | リポジトリ直下(Docker) | 上記ビルドの `catkin_make` を `catkin_make --cmake-args -DCATKIN_WHITELIST_PACKAGES="" -DCMAKE_CXX_FLAGS_DEBUG="-g -fsanitize=address,undefined -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"` に替える | 同上。ビルド成立のみ確認済みで、実行は未検証 | `CMAKE_CXX_FLAGS` への指定(CMakeLists.txt が `-O3` で上書きする)。MSan・TSan は未試行 |
-| ゴールデン出力の検証 | 【記入】 | 【記入】 | 【記入】 | 【記入】 |
+| ゴールデン出力の検証 | リポジトリ直下(Docker) | 数学と状態の表現: `tests/math/run_math_golden.sh check`(形式と出所は golden/math/README.md) | Docker イメージ。`golden/math/SHA256SUMS` の一致 | `write`(人の承認と専用コミットが要る) |
 | Rust ビルド・テスト | 【記入】 | 【記入】 | 【記入】 | 【記入】 |
 
 未記入のコマンドは推測して実行しない。必要な操作について確認する。

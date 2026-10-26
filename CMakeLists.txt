@@ -121,3 +121,8 @@ if(GTEST_FOUND)
   target_link_libraries(math_tests ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} GTest::GTest GTest::Main)
   target_include_directories(math_tests PRIVATE src ${PYTHON_INCLUDE_DIRS})
 endif()
+
+# 数学と状態の表現の L2 ゴールデン出力の生成と照合(golden/math)
+add_executable(math_golden tests/math/math_golden.cpp ${POINTLIO_CORE_SOURCES})
+target_link_libraries(math_golden ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
+target_include_directories(math_golden PRIVATE src ${PYTHON_INCLUDE_DIRS})
