@@ -28,3 +28,18 @@ bag から `eval/extract_input.py`(`add3cf1`)で作る、ファイル駆動の�
 - Avia の IMU は g 単位(`acc_norm: 1.0`)。Ouster の IMU は m/s²。
 - 点群の時刻フィールド単位と設定の整合は、実行して確認するまで未検証。
 - 動的環境の bag は含めない(2026-10-21 に決定。理由は計画書のフェーズ0を参照)。
+
+## 最終評価用(封印)
+
+計画書 §3 の最終評価用のデータ。2026-10-26 に人が選んだ。**C が完成するまで実行しない**(抽出・`rosbag info` 以外の中身の確認・推定器の実行・正解の閲覧をしない)。D は封印を解いた後に作るので、D の報告ではこのデータへの合わせ込みを防げていないと書く。
+
+| ID | 条件 | センサ | 状態 | SHA256 | 正解 |
+| --- | --- | --- | --- | --- | --- |
+| ncd-maths-hard | 激しい運動(最速の歩行、速い回転と揺れ、無特徴の面)。243 s | Ouster OS0-128(開発用の ouster-nc-quad-easy と同じ機材) | **未取得**。Newer College の配布ページのフォームから申し込む必要がある(CC BY-NC-SA 4.0) | 未記録 | 有無は取得時に確認 |
+| glim-flatwall-01〜08 | 完全な退化(平らな壁だけを見る) | Livox Avia | 取得済み(下の節) | `~/data/slamrun/flatwall/sha256.txt` | `gt.tar.gz`(AprilTag を見るカメラから求めた軌跡)。中身は見ていない |
+
+選定の経緯:
+
+- 激しい運動には、初め Newer College の quad-hard(手元にある)を選んだ。しかし別プロジェクト slamrun に、Point-LIO の別の版・別の設定で quad_hard・quad_medium・stairs を走らせた ATE の記録があり、2026-10-26 にそれを見た。そのため quad-hard を外し、slamrun で使われていない maths-hard に差し替えた。
+- stairs(退化に近い)と park(長時間)も候補だったが、人の判断で選ばなかった(stairs は、その後に slamrun での使用歴も分かった)。長時間の条件は最終評価用にない。
+- maths-hard と Flatwall の使用歴は、slamrun のリポジトリ(`results/` と記録の文書)に見当たらなかった(ファイル名と本文の検索による)。
