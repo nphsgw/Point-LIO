@@ -44,7 +44,7 @@ A→Bの差がバグ修正の効果、B→Cの差が言語・実装の効果。A
 |---|---|
 | 1. 評価データ | 完了([evaluation-data.md](evaluation-data.md)) |
 | 2. 実行ハーネス | 実装前の基準の保存(手順0・0b)まで。ROS 経路は44回すべてで軌跡がビット一致した。抽出器・`pointlio_offline` は未着手([ros-free-harness.md](../agents/plans/ros-free-harness.md)) |
-| 3. 事前登録 | 承認済み([metrics-preregistration.md](metrics-preregistration.md))。スレッド数と τ の扱いに要確認が残る |
+| 3. 事前登録 | 承認済み([metrics-preregistration.md](metrics-preregistration.md))。スレッド数と τ の扱いに要確認が残る。τ は規則5のままでは B→C がほぼ確実に不通過になる([fp-order-sensitivity.md](fp-order-sensitivity.md)) |
 | 4. A のベースライン | 未着手。事前登録はハーネス経由の実行を求めるため、2 の完了後 |
 
 ## フェーズ1: バグ調査(2〜3週間、期限固定)
