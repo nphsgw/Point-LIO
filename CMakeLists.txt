@@ -113,3 +113,11 @@ endif()
 
 
 
+
+# 数学と状態の表現の L1 テスト(tests/math)。googletest はイメージの libgtest-dev
+find_package(GTest QUIET)
+if(GTEST_FOUND)
+  add_executable(math_tests tests/math/math_tests.cpp ${POINTLIO_CORE_SOURCES})
+  target_link_libraries(math_tests ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} GTest::GTest GTest::Main)
+  target_include_directories(math_tests PRIVATE src ${PYTHON_INCLUDE_DIRS})
+endif()
