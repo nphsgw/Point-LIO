@@ -1,6 +1,6 @@
 # プラン: ROS 非依存の実行ハーネス
 
-状態: 手順0a・0・0b を実施済み(2026-10-26)。手順0のうち `OMP_NUM_THREADS` の実測と、T14 の Chamfer 幅の算出は未実施。手順1以降は未着手。§9 の要確認が残っている
+状態: 手順0〜5 を実施し、T1〜T14 はすべて通過(2026-10-26、§10)。手順6の差分レビュー(別セッション)は未実施。§9 の要確認が残っている
 元資料: [計画書 フェーズ0 項目2](../../docs/rust-reimplementation-verification-plan.md)、[指標と許容誤差の事前登録](../../docs/metrics-preregistration.md)、[評価データ](../../docs/evaluation-data.md)
 
 「確認済み」はコードを読んだ範囲(ビルド・実行はしていない)、「要確認」は未決定または未検証を指す。
@@ -179,11 +179,13 @@ ROS 経路から変えずに引き継ぐ挙動(確認済み。いずれもコー
 
 | 検証 | 実行場所 | コマンド | 前提条件 |
 | --- | --- | --- | --- |
-| 抽出・リーダ(T1〜T5、T12) | Docker(`point-lio-noetic`) | 【記入: 抽出器・テストが存在しないため、実装時に確定】 | bag の SHA256 一致、`~/data/slamrun` |
-| 前処理の同値(T6) | Docker | 【記入: 同上】 | 同上 |
+| 抽出(T1〜T4、T12 の種別の列) | リポジトリ直下(Docker) | `tests/harness/run_extract_tests.sh` | bag の SHA256 一致、`~/data/slamrun`、入力ファイルが `~/data/slamrun-input` |
+| リーダ・前処理・軌跡の書式(T5、T6、T13) | リポジトリ直下(Docker) | `tests/harness/run_cpp_tests.sh` | 同上 |
 | ROS 経路(基準の保存、T8) | リポジトリ直下 | `eval/run_cpp.sh <avia-quick-shack\|ouster-nc-quad-easy> <出力ディレクトリ>` を10回 | Docker、bag の SHA256 一致 |
 | 軌跡の比較(T7、T8) | 作業用 venv(`~/clone/slamrun/.venv`) | `evo_ape tum <基準> <比較> -a --t_max_diff 0.01`、`evo_rpe tum <基準> <比較> -r trans_part\|angle_deg --delta 10 --delta_unit m`(および `--delta 10 --delta_unit f`) | evo 1.37.1(venv の実際の版。以前の記載 1.38.1 は誤り。`tau_harness` もこの版で算出) |
-| ファイル駆動(T6〜T14) | Docker | 【記入: `pointlio_offline` が存在しないため、実装時に確定】 | 同上 |
+| ファイル駆動の実行(T7、T9、T10、T12、T14 の入力) | リポジトリ直下(Docker) | `eval/run_offline.sh <ID> <出力ディレクトリ>` を10回 | 入力ファイルの SHA256 一致 |
+| 設定の同値(T11) | リポジトリ直下(Docker) | `tests/harness/run_t11.sh <ID> <run_offline の出力>` | 同上 |
+| 結合の判定(T7〜T10、T12、T14) | 作業用 venv | `python -I tests/harness/check_runs.py <t7\|t8\|t9\|t10\|t12\|t14> ...`(evo の指標は上の evo_ape・evo_rpe と同じ定義を Python API で計算) | evo 1.37.1、rosbags、scipy |
 
 スレッド数は、`build.log` の `core for MP` の行と手順0の実測を、結果に添えて記録する。実行予定を、実行済みの結果として書かない。完了時に実行結果と未検証の範囲を追記する。
 
@@ -220,7 +222,74 @@ ROS 経路から変えずに引き継ぐ挙動(確認済み。いずれもコー
 要確認(実装中に確定):
 
 - 送り込みの方針(§3.4)。T7 が `tau_harness` を超えた場合の対処(方針の見直しか、差の原因調査か)は、そのとき報告して決める。
-- Eigen・PCL が内部で OpenMP を使うか(§2)。
+- Eigen・PCL が内部で OpenMP を使うか(§2)。→ 結果には影響しない: `OMP_NUM_THREADS=1` でも両 bag の出力が基準とビット一致した(§10)。使うかどうか自体は確認していない。
+
+## 10. 実施結果(2026-10-26)
+
+### 手順0の残り
+
+- `OMP_NUM_THREADS=1`(`run_cpp.sh` から渡せるようにした、`26b8f1e`): 両 bag で1回ずつ実行し、姿勢・点群とも手順0の基準とビット一致した。
+- T14 の Chamfer 幅: 0。手順0の10回は点の fields の値が一致しているので、45組すべて 0(run01 と run02・run10 で計算)。`eval/chamfer.py` が差を検出できることは、`-march=native` 版との比較(avia 0.050 m、ouster 0.020 m)で確認した。
+
+### 実装(コミット)
+
+| 手順 | コミット | 内容 |
+| --- | --- | --- |
+| 1・2 | `add3cf1` | 正準設定(`eval/config/canonical/`、`eval/dump_params.sh`)、抽出器(`eval/extract_input.py`)、形式の仕様書([harness-input-format.md](../../docs/harness-input-format.md))、T1〜T4 |
+| 4 | `501c9e9` | `main()` を `mapping_init`・`process_measures`・`mapping_finish` に分け、発行を `MappingOutput` 経由にした。ROS ノードの `main` は `laserMapping_node.cpp`。`readParameters` は `ParamSource` から読む |
+| 3・5 | `3dc49bc` | リーダ、YAML の読み出し元、出力、`pointlio_offline`、T5・T6・T13 |
+| 5 | `69441d5` | T7〜T12・T14 の判定(`tests/harness/check_runs.py`、`run_t11.sh`) |
+
+設計上の判断(プランに書いていなかった細部):
+
+- 入力ファイルのペイロードは、bag に記録された ROS1 のシリアライズのバイト列そのまま(§3.2 の案 A の容れ物の中身として)。値の変換がないので、bag とビット単位で同じになる。Rust 側はこの形式を読む(仕様書に各型の並びを記載)。
+- 受信処理(`li_initialization.cpp` のコールバック)は変更していない。ファイルから復元した型付きのメッセージを、そのままコールバックに渡す。
+- `readParameters` の本体は変えず、引数を `ParamSource` にした。ROS 側の読み出しは `NodeHandle::getParam`(`NodeHandle::param` と同じ結果)、YAML 側は PyYAML の型判定と roscpp の型変換を写した。
+- `pointlio_offline` は、`runtime_pos_log_enable` が真、`scan_publish_en` が偽、`con_frame`・`cut_frame` が真のときは、実行せずに失敗する。§3.5 は「`runtime_pos_log` を偽に固定」「累積は `scan_pub_en` と独立に常に行う」としていたが、黙って挙動を変えるより、正準設定(両 bag とも条件を満たす)で止めるほうを選んだ。ROS 経路の呼び出し条件は変えていない。
+- 軌跡の TUM の時刻は、`header.stamp` を `秒.ナノ秒` でそのまま書く(`odom_to_tum.py` は `to_sec()` を `%.9f` で書くため、1.6e9 秒台では末尾の桁が異なる。位置・姿勢の桁は同じ)。丸めのない比較は `odom.bin` で行う。
+- `check_runs.py` の `tau_harness` は、§5 の表(4桁に丸めた値)ではなく丸めない実測値を使う。丸めた値では、同一の軌跡でも RPE 10 m 並進が「超えた」と判定された。許容幅の定義は変えていない。
+
+### テストの結果
+
+| 要件 | 結果 |
+| --- | --- |
+| T1 | avia: IMU 9953・LiDAR 491、ouster: IMU 19902・LiDAR 1991。通過 |
+| T2・T12(種別の列) | 全レコードのペイロード・記録時刻・種別が bag と一致。各 bag 200件超を復元した値でも照合。通過 |
+| T3 | 2回の抽出で SHA256 一致。通過 |
+| T4 | 種別ごとのヘッダ時刻は単調非減少。通過 |
+| T5 | 全レコード(avia 10444、ouster 21893)を C++ で復元し、rosbag の C++ API で読んだ bag のメッセージと `operator==` で一致。通過 |
+| T6 | 全 LiDAR フレーム(avia 491 フレーム・約905万点、ouster 1991 フレーム・約3695万点)で、bag 経由とファイル経由の `Preprocess::process` の出力がビット一致。通過 |
+| T7 | `pointlio_offline` の10回すべてで、姿勢(`odom.bin`)が改造前 ROS の中央値実行とビット一致。ATE・RPE は `tau_harness` 以下。通過 |
+| T8 | 改造後の `pointlio_mapping` の10回すべてで、姿勢・点群が改造前とビット一致。通過。avia の7回目は `rosbag record` が何も記録せず(ノードは処理していた。記録の失敗として扱い、判定から外した)、同じ条件でやり直した1回(`run07-retry`)を10回目に数えた。原因は未確認(同時に別の検証を走らせていた) |
+| T9 | ファイル駆動の10回は、両 bag とも姿勢のハッシュが1種類。実行間の ATE の最大値は avia 1.086e-16 m、ouster 6.602e-15 m(evo の整列の丸め) |
+| T10 | NaN/Inf なし、姿勢数は avia 487・ouster 1985(手順0と同じ)、隣接姿勢の並進の最大は 10 m 以下。通過 |
+| T11 | ROS ノードと `pointlio_offline` の読み込み後の値が、全56キーで一致。通過 |
+| T12(捨て件数) | 時刻逆転で捨てた件数は、両経路とも LiDAR 0・IMU 0。通過 |
+| T13 | 書式・桁・時刻(`lidar_end_time` との差 1 ns 以下)。通過 |
+| T14 | フレームごとの時刻と点数が一致し、点の fields のバイトのハッシュも一致。Chamfer 0。通過 |
+
+「壊すと落ちる」ことの確認(いずれも落ちた):
+
+- T2: ペイロードの1バイトを反転した入力。T12: 1件の種別を入れ替えた入力。
+- T5: リーダが記録時刻のナノ秒に秒を読む版(確認後に戻した)。
+- T6: ファイル経由の入力で点の時刻を 0 にした版(Livox は `offset_time`、Ouster は `t` の値)。Ouster では、フィールド名を変えるだけでは落ちなかった。PCL 1.10 の `createMapping` は、配置が構造体と同じなら隣り合うフィールドを1回の `memcpy` にまとめ、名前の対応しないフィールドのバイトも写すため。
+- T7: 1件の IMU のヘッダ時刻を 1 ms ずらした入力(最初に食い違う姿勢は 243番目、ATE 7.9e-6 m)。一方、IMU を1件、直後の LiDAR の後ろへ遅らせた入力では、出力はビット一致のままだった。`sync_packages` が `lidar_end_time` を越える IMU の到着を待つため、到着順のこの程度の違いは結果に影響しない(ROS 経路が条件によらず決定的だったことの説明とも合う)。
+- T10: 姿勢列に NaN を1つ混ぜた版。T14: 累積点群から1フレーム分の点を落とした版。
+
+### 未検証の範囲
+
+- `cut_frame`・`con_frame`・`use_imu_as_input`・`imu_en: false`・`publish_odometry_without_downsample` の経路(両 config で通らない)。`pointlio_offline` は前2つを拒否する。
+- `flg_reset` の経路(到達しない)。
+- `publish_frame_world` を呼ぶ時点の `feats_down_world` が更新後の姿勢か(§3.5)。T14 は両経路の同じ出力を比べるだけなので、この点は確かめていない。
+- 性能(フレーム単位の時間・メモリ)。計測は入れていない。
+- 別の機械・コンパイラでの再現。
+- 手順6の差分レビュー(別セッション)。
+
+### 起票候補(バグ台帳)
+
+- `/cloud_registered` の点のパディングに、未初期化メモリが入って送られる(§2)。
+- `mtx_buffer` のデータ競合(§2)。今回の条件では結果に表れていない。
+- PCL の `fromROSMsg` は、フィールド名が合わなくても配置が同じならバイトを写す。仕様として知っておくべき挙動で、バグとは限らない。
 
 ## 完了時に記録するもの
 

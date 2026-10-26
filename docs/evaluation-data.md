@@ -7,6 +7,15 @@
 | avia-quick-shack | Livox Avia | 1 | `avia/2020-09-16-quick-shack.bag` | 227,829,516 B | 50 s | `05a56e75898f952766f136d1e5db64a35d202e990e3b1052558369d8384d7ffe` | なし |
 | ouster-nc-quad-easy | Ouster OS0-128 | 3 | `newer_college/2021-07-01-10-37-38-quad-easy-002.bag` | 10,775,549,922 B | 198 s | `64e4d2cdaffc652c4c536e9718a24999d0dd24ab71d255738a449d9683fc4215` | `newer_college/collection1/ground_truth/gt-nc-quad-easy.csv` |
 
+## ハーネスの入力ファイル
+
+bag から `eval/extract_input.py`(`add3cf1`)で作る、ファイル駆動の実行(`pointlio_offline`、将来の Rust)の入力。形式は [harness-input-format.md](harness-input-format.md)。置き場所は `~/data/slamrun-input`(リポジトリに含めない)。`eval/run_offline.sh` は SHA256 が一致しなければ実行しない。
+
+| ID | ファイル | サイズ | SHA256 |
+| --- | --- | --- | --- |
+| avia-quick-shack | `avia-quick-shack.plin` | 227,384,568 B | `cf90642183710ed725a3402296796eceec53088d77b362da2c38b2b1a404ac29` |
+| ouster-nc-quad-easy | `ouster-nc-quad-easy.plin` | 12,533,559,299 B | `571d5063f5121b7e745f1f8843a92a01a735734a1be7eafaa641638db0cd5a59` |
+
 ## 出所
 
 - avia-quick-shack: FAST-LIO 公開の Avia bag(Google Drive `1YqxHuDKzWUcda80QKBV61lXI86TXsGjP`)。取得日 2026-10-21。

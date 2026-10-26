@@ -38,12 +38,12 @@ A→Bの差がバグ修正の効果、B→Cの差が言語・実装の効果。A
    - 安定性: 発散回数、同一入力での実行間ばらつき
 4. **Aのベースライン確立**: as-isのC++を10回実行し、非決定性(スレッド、浮動小数点)のばらつきを測る。Rustの許容誤差はこのばらつきを基準にする
 
-**進捗(2026-10-26)**
+**進捗(2026-10-26 更新)**
 
 | 項目 | 状態 |
 |---|---|
 | 1. 評価データ | 完了([evaluation-data.md](evaluation-data.md)) |
-| 2. 実行ハーネス | 実装前の基準の保存(手順0・0b)まで。ROS 経路は44回すべてで軌跡がビット一致した。抽出器・`pointlio_offline` は未着手([ros-free-harness.md](../agents/plans/ros-free-harness.md)) |
+| 2. 実行ハーネス | 実装と T1〜T14 まで完了(2026-10-26)。`pointlio_offline` の出力は、改造前の ROS 経路とビット一致した。差分の別セッションでのレビューが残る([ros-free-harness.md](../agents/plans/ros-free-harness.md) §10) |
 | 3. 事前登録 | 承認済み([metrics-preregistration.md](metrics-preregistration.md))。スレッド数と τ の扱いに要確認が残る。τ は規則5のままでは B→C がほぼ確実に不通過になる([fp-order-sensitivity.md](fp-order-sensitivity.md)) |
 | 4. A のベースライン | 未着手。事前登録はハーネス経由の実行を求めるため、2 の完了後 |
 
