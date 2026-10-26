@@ -10,6 +10,7 @@
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
 #include "li_initialization.h"
+#include "mapping_core.h"
 #include <malloc.h>
 // #include <cv_bridge/cv_bridge.h>
 // #include "matplotlibcpp.h"
@@ -149,22 +150,22 @@ void MapIncremental() {
     ivox_->AddPoints(points_to_add);
 }
 
-void publish_init_map(const ros::Publisher & pubLaserCloudFullRes)
+void publish_init_map(MappingOutput & out)
 {
     int size_init_map = init_feats_world->size();
 
     sensor_msgs::PointCloud2 laserCloudmsg;
-                
+
     pcl::toROSMsg(*init_feats_world, laserCloudmsg);
-        
+
     laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
     laserCloudmsg.header.frame_id = "camera_init";
-    pubLaserCloudFullRes.publish(laserCloudmsg);
+    out.laser_map(laserCloudmsg);
 }
 
 PointCloudXYZI::Ptr pcl_wait_pub(new PointCloudXYZI(500000, 1));
 PointCloudXYZI::Ptr pcl_wait_save(new PointCloudXYZI());
-void publish_frame_world(const ros::Publisher & pubLaserCloudFullRes)
+void publish_frame_world(MappingOutput & out)
 {
     if (scan_pub_en)
     {
@@ -185,7 +186,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFullRes)
         
         laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
         laserCloudmsg.header.frame_id = "camera_init";
-        pubLaserCloudFullRes.publish(laserCloudmsg);
+        out.cloud_registered(laserCloudmsg);
         // publish_count -= PUBFRAME_PERIOD;
     }
     
@@ -222,7 +223,7 @@ void publish_frame_world(const ros::Publisher & pubLaserCloudFullRes)
     }
 }
 
-void publish_frame_body(const ros::Publisher & pubLaserCloudFull_body)
+void publish_frame_body(MappingOutput & out)
 {
     int size = feats_undistort->points.size();
     PointCloudXYZI::Ptr laserCloudIMUBody(new PointCloudXYZI(size, 1));
@@ -237,7 +238,7 @@ void publish_frame_body(const ros::Publisher & pubLaserCloudFull_body)
     pcl::toROSMsg(*laserCloudIMUBody, laserCloudmsg);
     laserCloudmsg.header.stamp = ros::Time().fromSec(lidar_end_time);
     laserCloudmsg.header.frame_id = "body";
-    pubLaserCloudFull_body.publish(laserCloudmsg);
+    out.cloud_registered_body(laserCloudmsg);
     // publish_count -= PUBFRAME_PERIOD;
 }
 
@@ -268,7 +269,7 @@ void set_posestamp(T & out)
     }
 }
 
-void publish_odometry(const ros::Publisher & pubOdomAftMapped)
+void publish_odometry(MappingOutput & out)
 {
     odomAftMapped.header.frame_id = "camera_init";
     odomAftMapped.child_frame_id = "body";
@@ -281,24 +282,11 @@ void publish_odometry(const ros::Publisher & pubOdomAftMapped)
         odomAftMapped.header.stamp = ros::Time().fromSec(lidar_end_time);
     }
     set_posestamp(odomAftMapped.pose.pose);
-    
-    pubOdomAftMapped.publish(odomAftMapped);
 
-    static tf::TransformBroadcaster br;
-    tf::Transform                   transform;
-    tf::Quaternion                  q;
-    transform.setOrigin(tf::Vector3(odomAftMapped.pose.pose.position.x, \
-                                    odomAftMapped.pose.pose.position.y, \
-                                    odomAftMapped.pose.pose.position.z));
-    q.setW(odomAftMapped.pose.pose.orientation.w);
-    q.setX(odomAftMapped.pose.pose.orientation.x);
-    q.setY(odomAftMapped.pose.pose.orientation.y);
-    q.setZ(odomAftMapped.pose.pose.orientation.z);
-    transform.setRotation( q );
-    br.sendTransform( tf::StampedTransform( transform, odomAftMapped.header.stamp, "camera_init", "body") );
+    out.odometry(odomAftMapped);
 }
 
-void publish_path(const ros::Publisher pubPath)
+void publish_path(MappingOutput & out)
 {
     set_posestamp(msg_body_pose.pose);
     // msg_body_pose.header.stamp = ros::Time::now();
@@ -309,26 +297,26 @@ void publish_path(const ros::Publisher pubPath)
     // if (jjj % 2 == 0) // if path is too large, the rvis will crash
     {
         path.poses.emplace_back(msg_body_pose);
-        pubPath.publish(path);
+        out.path(path);
     }
 }        
 
-int main(int argc, char** argv)
+// 以下は改造前の main() の局所変数。process_measures() をまたいで値を保つため、ファイル内の静的変数にした
+/*** variables definition for counting ***/
+static int frame_num = 0;
+static double aver_time_consu = 0, aver_time_icp = 0, aver_time_match = 0, aver_time_incre = 0, aver_time_solve = 0, aver_time_propag = 0;
+static Eigen::Matrix<double, 24, 24> P_init; // = MD(18, 18)::Identity() * 0.1;
+static Eigen::Matrix<double, 30, 30> P_init_output; // = MD(24, 24)::Identity() * 0.01;
+static Eigen::Matrix<double, 24, 24> Q_input;
+static Eigen::Matrix<double, 30, 30> Q_output;
+static FILE *fp = NULL;
+
+void mapping_init()
 {
-    ros::init(argc, argv, "laserMapping");
-    ros::NodeHandle nh("~");
-    ros::AsyncSpinner spinner(0);
-    spinner.start();
-    readParameters(nh);
-    cout<<"lidar_type: "<<lidar_type<<endl;
     ivox_ = std::make_shared<IVoxType>(ivox_options_);
     
     path.header.stamp    = ros::Time().fromSec(lidar_end_time);
     path.header.frame_id ="camera_init";
-
-    /*** variables definition for counting ***/
-    int frame_num = 0;
-    double aver_time_consu = 0, aver_time_icp = 0, aver_time_match = 0, aver_time_incre = 0, aver_time_solve = 0, aver_time_propag = 0;
 
     memset(point_selected_surf, true, sizeof(point_selected_surf));
     downSizeFilterSurf.setLeafSize(filter_size_surf_min, filter_size_surf_min, filter_size_surf_min);
@@ -356,50 +344,27 @@ int main(int argc, char** argv)
 
     kf_input.init_dyn_share_modified_2h(get_f_input, df_dx_input, h_model_input);
     kf_output.init_dyn_share_modified_3h(get_f_output, df_dx_output, h_model_output, h_model_IMU_output);
-    Eigen::Matrix<double, 24, 24> P_init; // = MD(18, 18)::Identity() * 0.1;
     reset_cov(P_init);
     kf_input.change_P(P_init);
-    Eigen::Matrix<double, 30, 30> P_init_output; // = MD(24, 24)::Identity() * 0.01;
     reset_cov_output(P_init_output);
     kf_output.change_P(P_init_output);
-    Eigen::Matrix<double, 24, 24> Q_input = process_noise_cov_input();
-    Eigen::Matrix<double, 30, 30> Q_output = process_noise_cov_output();
+    Q_input = process_noise_cov_input();
+    Q_output = process_noise_cov_output();
+}
+
+void open_debug_logs()
+{
     /*** debug record ***/
-    FILE *fp;
     string pos_log_dir = root_dir + "/Log/pos_log.txt";
     fp = fopen(pos_log_dir.c_str(),"w");
     open_file();
+}
 
-    /*** ROS subscribe initialization ***/
-    ros::Subscriber sub_pcl = p_pre->lidar_type == AVIA ? \
-        nh.subscribe(lid_topic, 200000, livox_pcl_cbk) : \
-        nh.subscribe(lid_topic, 200000, standard_pcl_cbk);
-    ros::Subscriber sub_imu = nh.subscribe(imu_topic, 200000, imu_cbk);
+// 改造前の main() のループで、sync_packages(Measures) が true のときに実行していた本体。
+// 行の並びとインデントは元のまま。continue は return に、各 publish の引数は out に置き換えた
+void process_measures(MappingOutput &out)
+{
 
-    ros::Publisher pubLaserCloudFullRes = nh.advertise<sensor_msgs::PointCloud2>
-            ("/cloud_registered", 1000);
-    ros::Publisher pubLaserCloudFullRes_body = nh.advertise<sensor_msgs::PointCloud2>
-            ("/cloud_registered_body", 1000);
-    // ros::Publisher pubLaserCloudEffect  = nh.advertise<sensor_msgs::PointCloud2>
-            // ("/cloud_effected", 1000);
-    ros::Publisher pubLaserCloudMap = nh.advertise<sensor_msgs::PointCloud2>
-            ("/Laser_map", 1000);
-    ros::Publisher pubOdomAftMapped = nh.advertise<nav_msgs::Odometry> 
-            ("/aft_mapped_to_init", 1000);
-    ros::Publisher pubPath          = nh.advertise<nav_msgs::Path> 
-            ("/path", 1000);
-    // ros::Publisher plane_pub = nh.advertise<visualization_msgs::Marker>
-            // ("/planner_normal", 1000);
-//------------------------------------------------------------------------------------------------------
-    signal(SIGINT, SigHandle);
-    ros::Rate loop_rate(500);
-    bool status = ros::ok();
-    while (status)
-    {
-        if (flg_exit) break;
-        ros::spinOnce();
-        if(sync_packages(Measures)) 
-        {
             if (flg_reset)
             {
                 ROS_WARN("reset when rosbag play back");
@@ -518,7 +483,7 @@ int main(int argc, char** argv)
                     kf_output.x_.acc = - rot_init.transpose() * kf_output.x_.gravity;
                 }
                 else{
-                continue;}
+                return;}
             }
             /*** initialize the map ***/
             if(!init_map)
@@ -539,12 +504,12 @@ int main(int argc, char** argv)
                 else
                 {   
                     ivox_->AddPoints(init_feats_world->points);
-                    publish_init_map(pubLaserCloudMap); //(pubLaserCloudFullRes);
+                    publish_init_map(out); //(pubLaserCloudFullRes);
                     
                     init_feats_world.reset(new PointCloudXYZI());
                     init_map = true;
                 }
-                continue;
+                return;
             }
 
             /*** ICP and Kalman filter update ***/
@@ -711,7 +676,7 @@ int main(int argc, char** argv)
                     {
                         /******* Publish odometry *******/
 
-                        publish_odometry(pubOdomAftMapped);
+                        publish_odometry(out);
                         if (runtime_pos_log)
                         {
                             euler_cur = SO3ToEuler(kf_output.x_.rot);
@@ -904,7 +869,7 @@ int main(int argc, char** argv)
                     {
                         /******* Publish odometry *******/
 
-                        publish_odometry(pubOdomAftMapped);
+                        publish_odometry(out);
                         if (runtime_pos_log)
                         {
                             euler_cur = SO3ToEuler(kf_input.x_.rot);
@@ -1004,7 +969,7 @@ int main(int argc, char** argv)
             /******* Publish odometry downsample *******/
             if (!publish_odometry_without_downsample)
             {
-                publish_odometry(pubOdomAftMapped);
+                publish_odometry(out);
             }
 
             /*** add the feature points to map ***/
@@ -1017,9 +982,9 @@ int main(int argc, char** argv)
 
             t5 = omp_get_wtime();
             /******* Publish points *******/
-            if (path_en)                         publish_path(pubPath);
-            if (scan_pub_en || pcd_save_en)      publish_frame_world(pubLaserCloudFullRes);
-            if (scan_pub_en && scan_body_pub_en) publish_frame_body(pubLaserCloudFullRes_body);
+            if (path_en)                         publish_path(out);
+            if (scan_pub_en || pcd_save_en)      publish_frame_world(out);
+            if (scan_pub_en && scan_body_pub_en) publish_frame_body(out);
             
             /*** Debug variables Logging ***/
             if (runtime_pos_log)
@@ -1053,10 +1018,10 @@ int main(int argc, char** argv)
                 }
                 dump_lio_state_to_log(fp);
             }
-        }
-        status = ros::ok();
-        loop_rate.sleep();
-    }
+}
+
+void mapping_finish()
+{
     //--------------------------save map-----------------------------------
     /* 1. make sure you have enough memories
     /* 2. noted that pcd save will influence the real-time performences **/
@@ -1069,5 +1034,4 @@ int main(int argc, char** argv)
     }
     fout_out.close();
     fout_imu_pbp.close();
-    return 0;
 }

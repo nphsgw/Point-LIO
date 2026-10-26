@@ -44,7 +44,32 @@ MeasureGroup Measures;
 
 ofstream fout_out, fout_imu_pbp;
 
-void readParameters(ros::NodeHandle &nh)
+namespace
+{
+// ros::NodeHandle::param は hasParam が真で getParam が成功したときだけ値を使う。getParam は無いと偽を返すので、同じ結果になる
+class RosParamSource : public ParamSource
+{
+public:
+  explicit RosParamSource(ros::NodeHandle &nh) : nh_(nh) {}
+  bool get(const std::string &key, bool &v) const override { return nh_.getParam(key, v); }
+  bool get(const std::string &key, int &v) const override { return nh_.getParam(key, v); }
+  bool get(const std::string &key, float &v) const override { return nh_.getParam(key, v); }
+  bool get(const std::string &key, double &v) const override { return nh_.getParam(key, v); }
+  bool get(const std::string &key, std::string &v) const override { return nh_.getParam(key, v); }
+  bool get(const std::string &key, std::vector<double> &v) const override { return nh_.getParam(key, v); }
+
+private:
+  ros::NodeHandle &nh_;
+};
+}
+
+void readParameters(ros::NodeHandle &n)
+{
+  RosParamSource src(n);
+  readParameters(src);
+}
+
+void readParameters(ParamSource &nh)
 {
   p_pre.reset(new Preprocess());
   p_imu.reset(new ImuProcess());
@@ -120,6 +145,50 @@ void readParameters(ros::NodeHandle &nh)
   }
     p_imu->gravity_ << VEC_FROM_ARRAY(gravity);
 }
+
+namespace
+{
+void dump_value(std::ostream &os, const char *name, double v)
+{
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%.17g", v);
+  os << name << " " << buf << "\n";
+}
+void dump_value(std::ostream &os, const char *name, const std::string &v) { os << name << " " << v << "\n"; }
+void dump_value(std::ostream &os, const char *name, const std::vector<double> &v)
+{
+  os << name;
+  char buf[64];
+  for (double x : v)
+  {
+    snprintf(buf, sizeof(buf), " %.17g", x);
+    os << buf;
+  }
+  os << " (n=" << v.size() << ")\n";
+}
+}
+
+#define DUMP(x) dump_value(os, #x, x)
+void dump_parameters(std::ostream &os)
+{
+  // readParameters が代入する変数を、代入順にすべて並べる
+  DUMP(prop_at_freq_of_imu); DUMP(use_imu_as_input); DUMP(check_satu); DUMP(init_map_size);
+  DUMP(space_down_sample); DUMP(satu_acc); DUMP(satu_gyro); DUMP(acc_norm); DUMP(plane_thr);
+  DUMP(p_pre->point_filter_num); DUMP(lid_topic); DUMP(imu_topic); DUMP(con_frame); DUMP(con_frame_num);
+  DUMP(cut_frame); DUMP(cut_frame_time_interval); DUMP(time_diff_lidar_to_imu);
+  DUMP(filter_size_surf_min); DUMP(filter_size_map_min); DUMP(DET_RANGE); DUMP(fov_deg);
+  DUMP(imu_en); DUMP(extrinsic_est_en); DUMP(imu_time_inte); DUMP(laser_point_cov);
+  DUMP(acc_cov_input); DUMP(vel_cov); DUMP(gyr_cov_input); DUMP(gyr_cov_output); DUMP(acc_cov_output);
+  DUMP(b_gyr_cov); DUMP(b_acc_cov); DUMP(imu_meas_acc_cov); DUMP(imu_meas_omg_cov);
+  DUMP(p_pre->blind); DUMP(lidar_type); DUMP(p_pre->N_SCANS); DUMP(p_pre->SCAN_RATE); DUMP(p_pre->time_unit);
+  DUMP(match_s); DUMP(gravity); DUMP(gravity_init); DUMP(extrinT); DUMP(extrinR);
+  DUMP(publish_odometry_without_downsample); DUMP(path_en); DUMP(scan_pub_en); DUMP(scan_body_pub_en);
+  DUMP(runtime_pos_log); DUMP(pcd_save_en); DUMP(pcd_save_interval); DUMP(lidar_time_inte);
+  DUMP(ivox_options_.resolution_); DUMP(ivox_nearby_type); DUMP(static_cast<int>(ivox_options_.nearby_type_));
+  std::vector<double> g(p_imu->gravity_.data(), p_imu->gravity_.data() + 3);
+  DUMP(g);
+}
+#undef DUMP
 
 Eigen::Matrix<double, 3, 1> SO3ToEuler(const SO3 &rot) 
 {

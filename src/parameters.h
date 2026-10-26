@@ -76,7 +76,30 @@ extern double time_update_last, time_current, time_predict_last_const, t_last;
 extern MeasureGroup Measures;
 
 extern ofstream fout_out, fout_imu_pbp;
+
+// パラメータの読み出し元。ROS ノードはパラメータサーバ、pointlio_offline は正準設定の YAML から読む。
+// param() は ros::NodeHandle::param と同じ規則(値が取れなければ既定値)。get() の型変換も roscpp に合わせる。
+class ParamSource
+{
+public:
+  virtual ~ParamSource() {}
+  virtual bool get(const std::string &key, bool &v) const = 0;
+  virtual bool get(const std::string &key, int &v) const = 0;
+  virtual bool get(const std::string &key, float &v) const = 0;
+  virtual bool get(const std::string &key, double &v) const = 0;
+  virtual bool get(const std::string &key, std::string &v) const = 0;
+  virtual bool get(const std::string &key, std::vector<double> &v) const = 0;
+  template <typename T>
+  void param(const std::string &key, T &v, const T &default_val) const
+  {
+    if (!get(key, v)) v = default_val;
+  }
+};
+
+void readParameters(ParamSource &nh);
 void readParameters(ros::NodeHandle &n);
+// readParameters が設定した値をすべて書き出す(設定の同値の検査用)
+void dump_parameters(std::ostream &os);
 void open_file();
 Eigen::Matrix<double, 3, 1> SO3ToEuler(const SO3 &orient);
 void reset_cov(Eigen::Matrix<double, 24, 24> & P_init);
