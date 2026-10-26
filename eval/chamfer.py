@@ -3,7 +3,7 @@
 
 点群の入力は2形式:
 - *.bag: /cloud_registered の全フレームを累積する(run_cpp.sh の cloud.bag)
-- *.bin: float32 の (x, y, z, intensity) の列(pointlio_offline の map.bin)
+- *.bin: pointlio_offline の cloud.bin(1点 = float32 × 8。先頭の3つが x, y, z。形式は src/offline_output.h)
 累積点群を 0.1 m のボクセルで間引き(ボクセル内の点の重心。PCL の VoxelGrid と同じ考え方)、
 双方向の最近傍距離の平均を、さらに双方向で平均する。
 使い方(作業用 venv。rosbags・scipy が必要): chamfer.py <基準> <比較>
@@ -19,7 +19,7 @@ VOXEL = 0.1
 
 def load(path):
     if path.endswith(".bin"):
-        return np.fromfile(path, dtype=np.float32).reshape(-1, 4)[:, :3].astype(np.float64)
+        return np.fromfile(path, dtype=np.float32).reshape(-1, 8)[:, :3].astype(np.float64)
     from rosbags.rosbag1 import Reader
     from rosbags.typesys import Stores, get_typestore
     ts = get_typestore(Stores.ROS1_NOETIC)
