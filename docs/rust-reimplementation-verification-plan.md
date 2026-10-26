@@ -141,7 +141,7 @@ B 全体の完成は移植の前提にしない。範囲ごとに上の5つを�
 | 2. 実行ハーネス | 実装と T1〜T14 まで完了(2026-10-26)。`pointlio_offline` の出力は、改造前の ROS 経路とビット一致した。差分の別セッションでのレビューが残る([ros-free-harness.md](../agents/plans/ros-free-harness.md) §10) |
 | 3. 事前登録 | 承認済み([metrics-preregistration.md](metrics-preregistration.md))。判定の構成の改訂案を別レビュー中(1回目の指摘を反映済み、[改訂案](metrics-preregistration-revision-proposal.md))。スレッド数の扱いに要確認が残る |
 | 4. A のベースライン | 未着手。V0 はファイル駆動の10回(T7・T9)、V1 相当は ROS 経路の代理実験のみ([fp-order-sensitivity.md](fp-order-sensitivity.md))。V2〜V4 は未実行 |
-| 5. 再現性と判定の道具 | 実施(2026-10-26)。タグ `A-v1`、Dockerfile の固定と `docker/packages.lock`・`docker/check_packages.sh`、メタデータの拡張、`tests/harness/venv.lock`、T7・T8 の修正と注入による確認、台帳。固定した Dockerfile で作り直したイメージ(`point-lio-noetic:pinned`、全パッケージが lock と一致)で、各 bag 1回ずつ T7・T8・T10・T12・T14 が通過し、姿勢・点群とも基準とビット一致した(2026-10-26。記録は `~/data/slamrun-runs/pinned`)。ただし未コミットの作業ツリー(`git_dirty=12`、差分は各出力の `git_diff.patch`。C++ のソースは `A-v1` と同じ)での実行で、`git_dirty=0` での再実行は残る |
+| 5. 再現性と判定の道具 | 実施(2026-10-26)。タグ `A-v1`、Dockerfile の固定と `docker/packages.lock`・`docker/check_packages.sh`、メタデータの拡張、`tests/harness/venv.lock`、T7・T8 の修正と注入による確認、台帳。固定した Dockerfile で作り直したイメージ(`point-lio-noetic:pinned`、全パッケージが lock と一致)で、各 bag 1回ずつ T7・T8・T10・T12・T14 が通過し、姿勢・点群とも基準とビット一致した(2026-10-26。記録は `~/data/slamrun-runs/pinned`)。これは未コミットの作業ツリー(`git_dirty=12`、差分は各出力の `git_diff.patch`。C++ のソースは `A-v1` と同じ)での実行で、コミット後の `c8b197a`・`git_dirty=0` でも同じく全項目が通過し、ビット一致した(記録は `~/data/slamrun-runs/clean-c8b197a`) |
 | 6. トレース・状態の定義・入力生成器・性能・サニタイザ | 未着手。サニタイザはビルドの成立のみ確認済みで、実行は未検証 |
 
 ### フェーズ1: バグ調査(2〜3週間、期限固定)
@@ -238,8 +238,7 @@ B 全体の完成は移植の前提にしない。範囲ごとに上の5つを�
 
 ## 次の作業
 
-1. コミット後に、`git_dirty=0` で T7・T10・T14 を再実行する(固定版のイメージでは、未コミットの作業ツリーでビット一致を確認済み)
-2. 改訂案の2回目のレビューと、人の承認
-3. 最終評価用のデータの候補の選定(人の確認に出す)
-4. フェーズ0の項目6と、項目4(A のベースライン)
-5. 最初に移す範囲(数学と状態の表現)が §6 の条件を満たしたら、その範囲の移植プランを作る。フェーズ1・2 を並行して進める
+1. 改訂案の2回目のレビューと、人の承認
+2. 最終評価用のデータの候補の選定(人の確認に出す)
+3. フェーズ0の項目6と、項目4(A のベースライン)
+4. 最初に移す範囲(数学と状態の表現)が §6 の条件を満たしたら、その範囲の移植プランを作る。フェーズ1・2 を並行して進める
