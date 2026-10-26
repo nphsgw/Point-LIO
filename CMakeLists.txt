@@ -85,11 +85,31 @@ catkin_package(
   INCLUDE_DIRS
 )
 
-add_executable(pointlio_mapping src/laserMapping.cpp 
+add_executable(pointlio_mapping src/laserMapping.cpp src/laserMapping_node.cpp
                 src/li_initialization.cpp src/parameters.cpp src/preprocess.cpp src/Estimator.cpp 
                 src/IMU_Processing.cpp)
 target_link_libraries(pointlio_mapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
 target_include_directories(pointlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
+
+# ROS 非依存の実行ハーネス(agents/plans/ros-free-harness.md)。ROS のメッセージ型にはリンクするが、roscore もノードも使わない
+find_package(yaml-cpp REQUIRED)
+set(POINTLIO_CORE_SOURCES src/laserMapping.cpp
+                src/li_initialization.cpp src/parameters.cpp src/preprocess.cpp src/Estimator.cpp 
+                src/IMU_Processing.cpp)
+add_executable(pointlio_offline src/offline_main.cpp src/harness_input.cpp src/yaml_params.cpp
+                src/offline_output.cpp ${POINTLIO_CORE_SOURCES})
+target_link_libraries(pointlio_offline ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} ${YAML_CPP_LIBRARIES})
+target_include_directories(pointlio_offline PRIVATE ${PYTHON_INCLUDE_DIRS} ${YAML_CPP_INCLUDE_DIR})
+
+# ハーネスのテスト(tests/harness)。rosbag は比較の基準を bag から読むためだけに使う
+find_package(rosbag QUIET)
+if(rosbag_FOUND)
+  add_executable(harness_tests tests/harness/harness_tests.cpp src/harness_input.cpp src/yaml_params.cpp
+                  src/offline_output.cpp ${POINTLIO_CORE_SOURCES})
+  target_link_libraries(harness_tests ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} ${YAML_CPP_LIBRARIES}
+                        ${rosbag_LIBRARIES})
+  target_include_directories(harness_tests PRIVATE src ${PYTHON_INCLUDE_DIRS} ${YAML_CPP_INCLUDE_DIR} ${rosbag_INCLUDE_DIRS})
+endif()
 
 
 
