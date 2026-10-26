@@ -31,7 +31,7 @@ C++14 / ROS1(catkin)/ Eigen3 / PCL 1.8 / OpenMP(任意)。READMEの動作確認�
 | 操作 | 実行場所 | コマンド・参照先 | 前提条件 | 使わないもの(理由) |
 | --- | --- | --- | --- | --- |
 | ビルド(C++) | リポジトリ直下(Docker) | 初回のみ `docker build -t point-lio-noetic -f docker/Dockerfile docker`。ビルドは `docker run --rm -v "$PWD":/ws/src/point_lio:ro point-lio-noetic bash -c '. /opt/ros/noetic/setup.sh && . /ws/devel/setup.sh && cd /ws && catkin_make'` | Docker。イメージに ROS noetic・glog・livox_ros_driver 入り | ホスト直での `catkin_make`(ホストは noetic 環境ではない)。成果物は `--rm` で消える |
-| 実行(C++) | リポジトリ直下 | `eval/run_cpp.sh <avia-quick-shack\|ouster-nc-quad-easy> <出力ディレクトリ>`(ビルド・bag 再生・記録・TUM 変換まで。出力は `traj.tum`、`meta.txt`、各ログ) | Docker イメージ `point-lio-noetic:latest`、bag が `~/data/slamrun`(SHA256 不一致なら中止) | `mapping_<sensor>.launch` の直接実行(rviz が起動する。Ouster は `scan_line` が 64 のままで OS0-128 に合わない)。実時間再生なので性能の数値には使わない |
+| 実行(C++) | リポジトリ直下 | `eval/run_cpp.sh <avia-quick-shack\|ouster-nc-quad-easy> <出力ディレクトリ>`(ビルド・bag 再生・記録・TUM 変換まで。出力は `traj.tum`、`cloud.bag`、`meta.txt`、各ログ。決定性の確認用に環境変数 `PLAY_RATE`・`RVIZ=1`) | Docker イメージ `point-lio-noetic:latest`、bag が `~/data/slamrun`(SHA256 不一致なら中止) | `mapping_<sensor>.launch` の直接実行(rviz が起動する。Ouster は `scan_line` が 64 のままで OS0-128 に合わない)。実時間再生なので性能の数値には使わない |
 | サニタイザ付きビルド(ASan+UBSan) | リポジトリ直下(Docker) | 上記ビルドの `catkin_make` を `catkin_make --cmake-args -DCATKIN_WHITELIST_PACKAGES="" -DCMAKE_CXX_FLAGS_DEBUG="-g -fsanitize=address,undefined -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"` に替える | 同上。ビルド成立のみ確認済みで、実行は未検証 | `CMAKE_CXX_FLAGS` への指定(CMakeLists.txt が `-O3` で上書きする)。MSan・TSan は未試行 |
 | ゴールデン出力の検証 | 【記入】 | 【記入】 | 【記入】 | 【記入】 |
 | Rust ビルド・テスト | 【記入】 | 【記入】 | 【記入】 | 【記入】 |

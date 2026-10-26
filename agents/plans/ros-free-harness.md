@@ -1,6 +1,6 @@
 # プラン: ROS 非依存の実行ハーネス
 
-状態: 2回目のレビュー(指摘4点)を反映済み。§9 に残る判断事項(判断2・3)は手順0の実測後に決める。それまで実装には進まない
+状態: 手順0a・0・0b を実施済み(2026-10-26)。手順0のうち `OMP_NUM_THREADS` の実測と、T14 の Chamfer 幅の算出は未実施。手順1以降は未着手。§9 の要確認が残っている
 元資料: [計画書 フェーズ0 項目2](../../docs/rust-reimplementation-verification-plan.md)、[指標と許容誤差の事前登録](../../docs/metrics-preregistration.md)、[評価データ](../../docs/evaluation-data.md)
 
 「確認済み」はコードを読んだ範囲(ビルド・実行はしていない)、「要確認」は未決定または未検証を指す。
@@ -27,7 +27,7 @@
 - コードを読んで確認した、非決定性の候補:
   - `main()` は `AsyncSpinner(0)` を起動し、同じループで `ros::spinOnce()` も呼ぶ。購読コールバック(`lidar_buffer`、`time_buffer`、`imu_deque` に書く)と、メインループ(同じキューを読んで `pop_front` する)が別スレッドで動く。
   - 排他制御はない。`mtx_buffer` の lock は [li_initialization.cpp](../../src/li_initialization.cpp) のコールバックでコメントアウトされている。データ競合の疑いであり、バグ台帳の起票候補。ここでは直さない。手順0の条件では結果に表れなかったが、疑いは消えていない。
-  - スレッド数: CMake がビルド時に `nproc` から `MP_EN`・`MP_PROC_NUM` を定義する(16 コアの本機では 4)。ただし `src/`・`include/` のどこにもこれらの参照、`#pragma omp`、`omp_set_num_threads` はなく、使われている OpenMP 関数は `omp_get_wtime` だけである(確認済み)。したがって、OpenMP によるコード内の並列化は非決定性の原因ではない。Eigen や PCL が `-fopenmp` のもとで内部的に OpenMP を使うかは未確認。手順0で `OMP_NUM_THREADS=1` と既定値の差を実測して報告する。事前登録の「`MP_PROC_NUM` を固定」の扱いは、この結果とともに人に報告して決める(§9)。
+  - スレッド数: CMake がビルド時に `nproc` から `MP_EN`・`MP_PROC_NUM` を定義する(16 コアの本機では 4)。ただし `src/`・`include/` のどこにもこれらの参照、`#pragma omp`、`omp_set_num_threads` はなく、使われている OpenMP 関数は `omp_get_wtime` だけである(確認済み)。したがって、OpenMP によるコード内の並列化は非決定性の原因ではない。Eigen や PCL が `-fopenmp` のもとで内部的に OpenMP を使うかは未確認。手順0で `OMP_NUM_THREADS=1` と既定値の差を実測して報告する予定だったが、未実施(`eval/run_cpp.sh` はコンテナに `OMP_NUM_THREADS` を渡さない)。事前登録の「`MP_PROC_NUM` を固定」の扱いは、この結果とともに人に報告して決める(§9)。
 
 ## 3. 詳細設計
 
@@ -123,6 +123,7 @@ ROS 経路から変えずに引き継ぐ挙動(確認済み。いずれもコー
 - 事前登録の規則5(τ が0に近くても下限を設けず、そのまま使う。ビット一致までは求めない)をそのまま適用する。`tau_harness` は上の実測値(指標ごと、bag ごとの全組の最大値)とする。結果を見た後に下限を置くこと、負荷をかけた条件の揺れで幅を広げることはしない。
 - T7・T8・T14 は、`tau_harness` を超えたら不合格とする。不合格の場合は、最初に食い違う姿勢を特定して、原因(送り込み順序の差(§3.4)か、改造・移植の誤りか)を報告する。
 - 中央値実行は、全10回が同一のため、どれを選んでも同じ(run01 を使う)。
+- 基準の保存先は `~/data/slamrun-runs/baseline-step0/<bag>/run01`〜`run10`(リポジトリ外)。`traj.tum` の SHA256 は avia `4a919f928cf6a677e009501bcaf92b791bb145fe524a4612d2d4d1873ddf2538`、ouster `152864f3a3abc3095cbe448610a0f93ac9572c0d9c60e68bcd4f197c364a32dd`(各10回共通)。基準を使う前に、この値と照合する。手順0b の記録は `~/data/slamrun-runs/step0b/` にある。
 - 実測値の一覧(bag・指標ごとの、45組の最大値。evo 1.37.1 の Python API、RMSE。ATE は SE(3) 整列・スケールなし、RPE は整列なし。入力は `~/data/slamrun-runs/baseline-step0` の run01〜run10。45組とも同じ値だった):
 
   | bag | ATE [m] | RPE 10 m 並進 [m] | RPE 10 m 回転 [deg] | RPE 10 フレーム 並進 [m] | RPE 10 フレーム 回転 [deg] |
@@ -161,7 +162,7 @@ ROS 経路から変えずに引き継ぐ挙動(確認済み。いずれもコー
 
 0a. **記録対象の追加**: 基準の保存の前に、`eval/run_cpp.sh` が `/aft_mapped_to_init` に加えて `/cloud_registered` も `rosbag record` するよう変えて、専用コミットにする(基準保存の後に直すと、地図の基準を取り直すことになる)。
 0. **基準の保存**: §5 冒頭の固定事項を先にコミットする。現 HEAD(0a の後)で `eval/run_cpp.sh` を各 bag に10回実行し、結果(TUM、`/cloud_registered` の記録、`meta.txt`、`build.log`、`node.log`)を保存する。`node.log` から `lidar loop back`・`imu loop back` の件数が取れるか(T12 の基準)を、ここで確認する。`tau_harness` をここで確定する。併せて、avia で `OMP_NUM_THREADS=1` と既定値の差を実測する(報告のみ)。これは A のベースライン(フェーズ0項目4)の予行を兼ねるが、事前登録の τ そのものではない(§9)。
-0b. **決定性の頑健さの確認**(§9 の決定8): 改造前の HEAD のまま、各 bag で再生速度 0.5 倍・2 倍(`PLAY_RATE`)と、全コアに負荷をかけた条件を、各3回実行する。手順0の基準と `traj.tum` の SHA256 を比べ、一致しない場合は ATE・RPE と最初に食い違う姿勢を記録する。rviz 付きの条件は、Docker 内に表示環境がなければ実施せず、未実施として記録する。結果は §2 に書き、`tau_harness` には使わない。
+0b. **決定性の頑健さの確認**(§9 の決定8): 改造前の HEAD のまま、各 bag で再生速度 0.5 倍・2 倍(`PLAY_RATE`)と、全コアに負荷をかけた条件を、各3回実行する。手順0の基準と `traj.tum` の SHA256 を比べ、一致しない場合は ATE・RPE と最初に食い違う姿勢を記録する。rviz 付きの条件は、ホストの X をコンテナに渡して実施した(`RVIZ=1`)。結果は §2 に書き、`tau_harness` には使わない。
 1. **正準設定**: `rosparam dump` を取り、`eval/config/` に置く。
 2. **抽出器と形式の仕様書**: T1〜T4 を先に書く。Red は、抽出器と入力ファイルが無い状態でテストを走らせて失敗する(ファイル不在をスキップや成功にしない)ことで確認し、その後に実装する。
 3. **C++ リーダ**: T5。
@@ -180,7 +181,7 @@ ROS 経路から変えずに引き継ぐ挙動(確認済み。いずれもコー
 | 抽出・リーダ(T1〜T5、T12) | Docker(`point-lio-noetic`) | 【記入: 抽出器・テストが存在しないため、実装時に確定】 | bag の SHA256 一致、`~/data/slamrun` |
 | 前処理の同値(T6) | Docker | 【記入: 同上】 | 同上 |
 | ROS 経路(基準の保存、T8) | リポジトリ直下 | `eval/run_cpp.sh <avia-quick-shack\|ouster-nc-quad-easy> <出力ディレクトリ>` を10回 | Docker、bag の SHA256 一致 |
-| 軌跡の比較(T7、T8) | 作業用 venv | `evo_ape tum <基準> <比較> -a --t_max_diff 0.01`、`evo_rpe tum <基準> <比較> -r trans_part\|angle_deg --delta 10 --delta_unit m`(および `--delta 10 --delta_unit f`) | evo 1.38.1 |
+| 軌跡の比較(T7、T8) | 作業用 venv(`~/clone/slamrun/.venv`) | `evo_ape tum <基準> <比較> -a --t_max_diff 0.01`、`evo_rpe tum <基準> <比較> -r trans_part\|angle_deg --delta 10 --delta_unit m`(および `--delta 10 --delta_unit f`) | evo 1.37.1(venv の実際の版。以前の記載 1.38.1 は誤り。`tau_harness` もこの版で算出) |
 | ファイル駆動(T6〜T14) | Docker | 【記入: `pointlio_offline` が存在しないため、実装時に確定】 | 同上 |
 
 スレッド数は、`build.log` の `core for MP` の行と手順0の実測を、結果に添えて記録する。実行予定を、実行済みの結果として書かない。完了時に実行結果と未検証の範囲を追記する。
