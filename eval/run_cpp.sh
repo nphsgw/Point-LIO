@@ -7,7 +7,8 @@
 #           RVIZ=1(mapping_<sensor>.launch と同じ引数で rviz を起動する。決定性の確認用。ホストの X が
 #           コンテナの root を許可している必要がある。例: xhost +SI:localuser:root)、
 #           EXTRA_CXX_FLAGS(CMAKE_CXX_FLAGS_DEBUG に渡す。CMakeLists.txt が CMAKE_CXX_FLAGS を上書きするため、
-#           ビルドタイプ Debug の追加分として -O3 の後ろに付く。演算順の感度の確認用。NO_BUILD=1 とは併用しない)
+#           ビルドタイプ Debug の追加分として -O3 の後ろに付く。演算順の感度の確認用。NO_BUILD=1 とは併用しない)、
+#           OMP_NUM_THREADS(設定したときだけコンテナに渡す。既定は渡さない)
 # スレッド数(MP_PROC_NUM)は CMakeLists.txt がビルド時に nproc から決める定義で、実行時には変えられない。
 # 使われた値は出力先の build.log("core for MP" の行。表示は 3 でも定義値は 4 のことがある)で確認する。
 # 再生は実時間(rosbag play)。性能の数値には使わない(docs/metrics-preregistration.md)。
@@ -40,11 +41,15 @@ mkdir -p "$out"; out=$(cd "$out" && pwd)
   echo "play_rate=${PLAY_RATE:-1}"
   echo "rviz=${RVIZ:-0}"
   echo "extra_cxx_flags=${EXTRA_CXX_FLAGS:-}"
+  echo "omp_num_threads=${OMP_NUM_THREADS:-unset}"
 } > "$out/meta.txt"
 
 if [ -n "${EXTRA_CXX_FLAGS:-}" ] && [ "${NO_BUILD:-0}" = 1 ]; then
   echo "EXTRA_CXX_FLAGS needs a build; unset NO_BUILD" >&2; exit 2
 fi
+
+omp=()
+[ -n "${OMP_NUM_THREADS:-}" ] && omp=(-e OMP_NUM_THREADS="$OMP_NUM_THREADS")
 
 x11=()
 if [ "${RVIZ:-0}" = 1 ]; then
@@ -54,7 +59,7 @@ fi
 
 docker run --rm \
   -e ID="$id" -e BAG="/data/$bag" -e LAUNCH="$launch" -e NO_BUILD="${NO_BUILD:-0}" \
-  -e PLAY_RATE="${PLAY_RATE:-1}" -e RVIZ="${RVIZ:-0}" -e EXTRA_CXX_FLAGS="${EXTRA_CXX_FLAGS:-}" "${x11[@]}" \
+  -e PLAY_RATE="${PLAY_RATE:-1}" -e RVIZ="${RVIZ:-0}" -e EXTRA_CXX_FLAGS="${EXTRA_CXX_FLAGS:-}" "${omp[@]}" "${x11[@]}" \
   -v "$repo":/ws/src/point_lio:ro -v "$data":/data:ro -v "$out":/out \
   "$image" bash -c '
     set -eo pipefail
