@@ -35,7 +35,7 @@ bag から `eval/extract_input.py`(`add3cf1`)で作る、ファイル駆動の�
 
 | ID | 条件 | センサ | 状態 | SHA256 | 正解 |
 | --- | --- | --- | --- | --- | --- |
-| ncd-maths-hard | 激しい運動(最速の歩行、速い回転と揺れ、無特徴の面)。243 s | Ouster OS0-128(開発用の ouster-nc-quad-easy と同じ機材) | **未取得**。Newer College の配布ページのフォームから申し込む必要がある(CC BY-NC-SA 4.0) | 未記録 | 有無は取得時に確認 |
+| ncd-maths-hard | 激しい運動(最速の歩行、速い回転と揺れ、無特徴の面)。243 s | Ouster OS0-128(開発用の ouster-nc-quad-easy と同じ機材) | 取得済み(下の節)。CC BY-NC-SA 4.0 | 下の節 | `gt_math_hard.csv`(TUM 形式)と `gt_state_hard.csv`。zip のまま置き、中身は見ていない |
 | glim-flatwall-01〜08 | 完全な退化(平らな壁だけを見る) | Livox Avia | 取得済み(下の節) | 下の節 | `gt.tar.gz`(AprilTag を見るカメラから求めた軌跡)。中身は見ていない |
 
 選定の経緯:
@@ -43,6 +43,23 @@ bag から `eval/extract_input.py`(`add3cf1`)で作る、ファイル駆動の�
 - 激しい運動には、初め Newer College の quad-hard(手元にある)を選んだ。しかし別プロジェクト slamrun に、Point-LIO の別の版・別の設定で quad_hard・quad_medium・stairs を走らせた ATE の記録があり、2026-10-26 にそれを見た。そのため quad-hard を外し、slamrun で使われていない maths-hard に差し替えた。
 - stairs(退化に近い)と park(長時間)も候補だったが、人の判断で選ばなかった(stairs は、その後に slamrun での使用歴も分かった)。長時間の条件は最終評価用にない。
 - maths-hard と Flatwall の使用歴は、slamrun のリポジトリ(`results/` と記録の文書)に見当たらなかった(ファイル名と本文の検索による)。
+
+### maths-hard の取得記録
+
+Newer College Dataset(collection 3 - maths institute)の配布ページのフォームから申し込み、Google Drive から 2026-10-30 に取得した。配布元のチェックサムは見当たらないので、下の SHA256 は取得後に私たちが計算した値。置き場所は `~/data/slamrun/newer_college`(リポジトリに含めない)。各 bag の横に `.sha256`、`collection3/` に `SHA256SUMS` を置いた。
+
+bag は2本に分かれている。1本目の終わりと2本目の始まりは同じ時刻(1617800538.98)で、合計 243 s。現在の `eval/extract_input.py` と `eval/run_cpp.sh` は bag を1本しか受け付けないので、封印を解くときに、2本をつなぐか、複数の bag を受け付けるかを決める必要がある。
+
+| ファイル | サイズ | 長さ | SHA256 |
+| --- | --- | --- | --- |
+| `2021-04-07-13-58-54_0-math-hard-001.bag` | 10,183,601,903 B | 192 s | `d3c21b6e76e136ca8b9df2c8e1b5c8c5dc81a4a9b01ba78871f1a00874583ceb` |
+| `2021-04-07-14-02-18_1-math-hard-004.bag` | 2,465,598,156 B | 51 s | `03ffd4028ea4f6dfc5e9bc57e9cfabeb9aa0c2fe3fd17c1b67382d5908801405` |
+| `collection3/collection 3 - maths institute-20261029T224732Z-1-010.zip`(`gt_math_hard.csv` と、評価に使わないカメラの較正1件) | 8,334,722 B | — | `08840f87f79a12895541e1bb2411b82ebd8861f2e2f9db5af1d51b2c41d56d33` |
+| `collection3/collection 3 - maths institute-20261029T224732Z-1-014.zip`(`gt_state_hard.csv`) | 121,723 B | — | `892b907e014877fa6871121194483f8966fe93f02879c8ec2cb2d887b9c82012` |
+
+取得時に行った確認は、bag への `rosbag info`、zip のファイル一覧の表示と CRC 検査(`unzip -t`)だけ。正解は展開していない。`rosbag info` で確かめたこと: どちらの bag もチャンクが揃っていて(lz4)、開発用の正準設定が使うトピック `/os_cloud_node/points`(1930+510 フレーム)と `/os_cloud_node/imu`(19296+5102 メッセージ)がある。
+
+同じときに math-easy と math-medium の bag、地図(`maths-institute.ply`)、カメラの較正も取得したが、ここには置いていない(`~/Downloads` に残っている)。同じ場所のデータなので、開発に使えば、このデータへの合わせ込みになりうる。
 
 ### Flatwall の取得記録
 

@@ -145,7 +145,7 @@ B 全体の完成は移植の前提にしない。範囲ごとに上の5つを�
 
 | 項目 | 状態 |
 |---|---|
-| 1. 評価データ | 開発用の2本は完了([evaluation-data.md](evaluation-data.md))。最終評価用は maths-hard(未取得)と Flatwall(取得済み)を選び、封印の規則を記録した(2026-10-26) |
+| 1. 評価データ | 開発用の2本は完了([evaluation-data.md](evaluation-data.md))。最終評価用は maths-hard と Flatwall を選び、封印の規則を記録した(2026-10-26)。どちらも取得済み(maths-hard は 2026-10-30) |
 | 2. 実行ハーネス | 実装と T1〜T14 まで完了(2026-10-26)。`pointlio_offline` の出力は、改造前の ROS 経路とビット一致した。差分の別セッションでのレビューが残る([ros-free-harness.md](../agents/plans/ros-free-harness.md) §10) |
 | 3. 事前登録 | 承認済み([metrics-preregistration.md](metrics-preregistration.md))。2026-10-26 に2回改訂。2回目で B→C の判定を J1〜J6 に組み替え、スレッド数を `OMP_NUM_THREADS` の記録に改めた(別レビュー3回、[改訂案](metrics-preregistration-revision-proposal.md))。付録(範囲ごとの基準)は未登録 |
 | 4. A のベースライン | 精度と感度分析を実施(2026-10-26、[a-baseline.md](a-baseline.md))。V0〜V4 とも変種の中でビット一致。τ(ATE)は avia 1.0e-01 m、ouster 8.7e-03 m。ouster の正解に対する ATE は 0.0694〜0.0704 m。性能の計測と RPE 1 s は未実施 |
@@ -249,5 +249,5 @@ B 全体の完成は移植の前提にしない。範囲ごとに上の5つを�
 1. 状態の定義の文書([state-definition.md](state-definition.md))のレビューと、トレースの仕様(§5)
 2. 数学と状態の表現の L1 テストとゴールデン出力。付録への (a, r) の登録
 3. 性能の計測の仕組み(フェーズ0の項目6)。A の性能を測る
-4. 最終評価用のデータ: maths-hard の取得(配布ページのフォームから申し込む)と封印
+4. 最終評価用のデータ: maths-hard の取得と封印(2026-10-30 に完了。[evaluation-data.md](evaluation-data.md))
 5. 台帳: BL-002・BL-006 の再現の試み、BL-001・BL-007 の B での修正
