@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <random>
 
 #include "Estimator.h"
@@ -153,9 +154,8 @@ TEST(So3Log, SmallAngleBranchErrorBound)
     }
 }
 
-// 無効: A-v1 の MTK の Log は、π − 1e-7 の付近で誤った値を返し、π − 1e-10 で NaN になる(台帳 BL-008、再現済み)。
-// B で直すか仕様として固定するかが決まるまで無効にする。範囲内の推定器は SO3 の Log を呼ばない
-TEST(So3Log, DISABLED_FiniteNearPi)
+// 台帳 BL-008: A-v1 の MTK の Log は、π − 1e-7 の付近で誤った値を返し、π − 1e-10 で NaN になる。B で直した
+TEST(So3Log, FiniteNearPi)
 {
     std::mt19937_64 g(6);
     for (double d : {1e-4, 1e-7, 1e-10, 0.0})
@@ -164,6 +164,22 @@ TEST(So3Log, DISABLED_FiniteNearPi)
             Eigen::Vector3d w = SO3d::log(SO3d(rodrigues(v)));
             ASSERT_TRUE(w.allFinite()) << "pi - " << d;
             EXPECT_LE(max_abs(rodrigues(w) - rodrigues(v)), 1e-6) << "pi - " << d;
+        }
+}
+
+// BL-008 の修正の分岐(回転角 π − d、d < 3.16e-4)の前後で、Log が真の回転ベクトルに戻る。
+// 分岐の中: atan2 と対称な部分から求めた軸は丸め程度の誤差なので、上限 1e-12。
+// 分岐の外(A と同じ式): acos の誤差 ε/d が θ/sin θ の sin θ ≈ d で割られ、相対誤差 ε/d² になる。上限は 10·ε/d²
+TEST(So3Log, AccurateAroundNearPiBranch)
+{
+    const double eps = std::numeric_limits<double>::epsilon();
+    std::mt19937_64 g(14);
+    for (double d : {1e-3, 4e-4, 3.2e-4, 3.1e-4, 2e-4, 1e-5, 1e-8, 1e-12})
+        for (int i = 0; i < 20; i++) {
+            Eigen::Vector3d v = random_vec(g, M_PI - d, M_PI - d);
+            Eigen::Vector3d w = SO3d::log(SO3d(rodrigues(v)));
+            double bound = d < 3.16e-4 ? 1e-12 : 10 * eps / (d * d);
+            EXPECT_LE((w - v).norm(), bound) << "pi - " << d;
         }
 }
 

@@ -337,6 +337,18 @@ struct SO3 : public Eigen::Matrix<_scalar, 3, 3> {
 	static Eigen::Vector3d log(const SO3 &orient){
 		double theta = (orient.trace() > 3.0 - 1e-6) ? 0.0 : std::acos(0.5 * (orient.trace() - 1));
     	Eigen::Matrix<double,3,1> K(orient(2,1) - orient(1,2), orient(0,2) - orient(2,0), orient(1,0) - orient(0,1));
+    	double c = 0.5 * (orient.trace() - 1);
+    	if (c < -1 + 5e-8)
+    	{
+        	// BL-008: 回転角が π − 3e-4 より大きいと、K と sin(theta) がともに小さく theta / sin(theta) * K が不正確になる。
+        	// 軸は対称な部分 (R + Rᵀ)/2 − cos(theta)·I = (1 − cos(theta))·a·aᵀ から、向きは K から求める
+        	Eigen::Matrix3d S = 0.5 * (orient + orient.transpose()) - c * Eigen::Matrix3d::Identity();
+        	int i;
+        	S.diagonal().maxCoeff(&i);
+        	Eigen::Vector3d a = S.col(i).normalized();
+        	if (a.dot(K) < 0) a = -a;
+        	return std::atan2(0.5 * K.norm(), c) * a;
+    	}
     	return (std::abs(theta) < 0.001) ? (0.5 * K) : (0.5 * theta / std::sin(theta) * K);
 	}
 };
