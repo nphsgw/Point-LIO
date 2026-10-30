@@ -1,6 +1,7 @@
 // 数学と状態の表現の L2 ゴールデン出力の生成と照合(形式は golden/math/README.md)。
 // 使い方: math_golden write <ディレクトリ>  ゴールデン出力を書く(更新は人の承認と専用コミット)
 //         math_golden check <ディレクトリ>  同じ入力で計算し直し、既存のファイルとバイト単位で比べる
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -132,6 +133,49 @@ std::vector<double> angles()
     for (int i = 0; i < 40; i++) t.push_back(log_uniform(1e-9, 1e-2));
     for (int i = 0; i < 40; i++) t.push_back(uniform(1e-2, M_PI - 1e-3));
     return t;
+}
+
+// 回転角が π の近くの入力(BL-008 の修正の後に追加、2026-10-30)。回転角を引数に取る部品の末尾に足す。
+// 既存の記録を変えないよう、既存の入力をすべて作った後に、別のシードの乱数列で作る。
+// 回転角は π − d。d は修正の分岐(d < 3.16e-4)の境界の前後、π ちょうど、1e-12〜1e-3 の対数一様
+void add_near_pi(std::vector<Case> &cs)
+{
+    rng.seed(20261030);
+    std::vector<double> t;
+    for (double d : {1e-3, 4e-4, 3.2e-4, 3.1e-4, 2e-4, 1e-4, 1e-5, 1e-7, 1e-10, 1e-12, 0.0}) t.push_back(M_PI - d);
+    for (int i = 0; i < 20; i++) t.push_back(M_PI - log_uniform(1e-12, 1e-3));
+
+    auto vec_in = [](double x) {
+        Vec in;
+        put(in, vec_with_norm(x));
+        return in;
+    };
+    auto rot_in = [](double x) {
+        Vec in;
+        put_rowmajor(in, SO3d::exp(vec_with_norm(x)));
+        return in;
+    };
+    auto boxplus_in = [](double x) {
+        Vec in;
+        put_rowmajor(in, SO3d::exp(vec_with_norm(uniform(0, 3))));
+        put(in, vec_with_norm(x));
+        return in;
+    };
+    auto boxminus_in = [](double x) {
+        Eigen::Matrix3d b = SO3d::exp(vec_with_norm(uniform(0, 3)));
+        Vec in;
+        put_rowmajor(in, b * SO3d::exp(vec_with_norm(x)));
+        put_rowmajor(in, b);
+        return in;
+    };
+    std::vector<std::pair<std::string, std::function<Vec(double)>>> make = {
+        {"so3_exp", vec_in},     {"so3_log", rot_in},  {"so3_boxplus", boxplus_in},     {"so3_boxminus", boxminus_in},
+        {"a_matrix", vec_in},    {"so3math_exp3", vec_in}, {"quat_from_matrix", rot_in}};
+    for (const auto &m : make) {
+        auto c = std::find_if(cs.begin(), cs.end(), [&](const Case &x) { return x.name == m.first; });
+        if (c == cs.end()) throw std::runtime_error("no case " + m.first);
+        for (double x : t) c->inputs.push_back(m.second(x));
+    }
 }
 
 std::vector<Case> cases()
@@ -354,6 +398,7 @@ std::vector<Case> cases()
         }
         cs.push_back(c);
     }
+    add_near_pi(cs);
     return cs;
 }
 
