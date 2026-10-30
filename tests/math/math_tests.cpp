@@ -339,4 +339,32 @@ TEST(SetInit, AntiParallelGravityGivesRotation)
     }
 }
 
+// --- iVox の近傍探索 ---
+
+// 台帳 BL-010: 候補が0件のとき、A は出力の入れ物を空にせず、前の中身が残る
+TEST(IVoxClosest, NoCandidateClearsOutput)
+{
+    IVoxType::Options opt;
+    IVoxType ivox(opt);
+    PointType far;
+    far.x = 100;
+    far.y = 0;
+    far.z = 0;
+    ivox.AddPoints(PointVector(1, far));
+
+    PointType q;
+    q.x = 0;
+    q.y = 0;
+    q.z = 0;
+    PointVector out(5, far);
+    EXPECT_FALSE(ivox.GetClosestPoint(q, out, 5));
+    EXPECT_TRUE(out.empty()) << out.size();
+
+    // 候補があるときは、見つけた点で埋める
+    out.assign(5, q);
+    EXPECT_TRUE(ivox.GetClosestPoint(far, out, 5));
+    ASSERT_EQ(out.size(), 1u);
+    EXPECT_EQ(out[0].x, far.x);
+}
+
 }  // namespace

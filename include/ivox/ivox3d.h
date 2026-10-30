@@ -169,6 +169,7 @@ bool IVox<dim, node_type, PointType>::GetClosestPoint(const PointType& pt, Point
     }
 
     if (candidates.empty()) {
+        closest_pt.clear();  // BL-010: 前の呼び出しの近傍点を残さない
         return false;
     }
 
