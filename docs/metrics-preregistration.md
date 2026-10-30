@@ -128,6 +128,13 @@ J1〜J6 のどれかが落ちた場合、基準を広げて通さず、停止し
 
 範囲ごとに、(a, r)、例外の幅の決め方、例外の件数の上限を、その範囲の C の最初のコミットより前に登録する(判定 4 節)。登録には人の承認が要る。
 
+u = 2⁻⁵³。‖b‖ は1つの記録の出力のうち、同じ区画の成分の絶対値の最大(a を記録ごとに決めるのは、出力の小さい記録で固定の摂動を隠さないため)。数学と状態の表現の範囲は、ゴールデン出力(`golden/math`)の各記録で比べる。
+
 | 範囲 | 段階・部品 | a | r | 例外の幅の決め方 | 例外の上限 | 根拠 | 承認 | 登録前に測った変種の差 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| (未登録) | | | | | | | | |
+| 数学と状態の表現 | `so3_log`、`so3_boxminus`、`state_boxminus`、`a_matrix` | 0 | 0(ビット一致) | 例外なし(分岐が B と異なれば停止) | 0 | Log の条件数(π の近くで ε/d²)と a_matrix の桁落ちで、導いた r が上限 5e-10 を超える。前提(同じ式・順・libm)のもとでビット一致が成り立つはず。詳細は [math-tolerance-proposal.md](math-tolerance-proposal.md) | 2026-10-30 | なし(B のゴールデン出力と、A・B の解析解との誤差だけを見た) |
+| 数学と状態の表現 | `so3_exp`、`so3_boxplus`、`so3math_exp3` | r·‖b‖ | 64u ≈ 7.1e-15 | 例外なし(分岐が B と異なれば停止) | 0 | 3項の和と積、sin・cos を十数回。差 ≤ 2n·u(n ≤ 16)に2倍の余裕。詳細は [math-tolerance-proposal.md](math-tolerance-proposal.md) | 2026-10-30 | なし(B のゴールデン出力と、A・B の解析解との誤差だけを見た) |
+| 数学と状態の表現 | `quat_from_matrix`(⟨q_c, q_b⟩ < 0 なら q_c の符号を反転して比べる) | r·‖b‖ | 64u | 例外なし(分岐が B と異なれば停止) | 0 | 同上。詳細は [math-tolerance-proposal.md](math-tolerance-proposal.md) | 2026-10-30 | なし(B のゴールデン出力と、A・B の解析解との誤差だけを見た) |
+| 数学と状態の表現 | `state_boxplus`、`predict_state`(‖b‖ は区画ごと) | r·‖b‖ | 64u | 例外なし(分岐が B と異なれば停止) | 0 | 区画ごとの和と、回転の Exp と 3×3 の積。詳細は [math-tolerance-proposal.md](math-tolerance-proposal.md) | 2026-10-30 | なし(B のゴールデン出力と、A・B の解析解との誤差だけを見た) |
+| 数学と状態の表現 | `f_output`(‖b‖ は区画ごと)、`df_dx_output`(‖b‖ は行列全体) | r·‖b‖ | 64u | 例外なし(分岐が B と異なれば停止) | 0 | 3×3 の積と反対称行列への写像。詳細は [math-tolerance-proposal.md](math-tolerance-proposal.md) | 2026-10-30 | なし(B のゴールデン出力と、A・B の解析解との誤差だけを見た) |
+| 数学と状態の表現 | `predict_cov`(‖b‖ は行列全体) | r·‖b‖ | 1e-10 | 例外なし(分岐が B と異なれば停止) | 0 | 30 項の積和2回の和の順がライブラリで異なりうる。上限 2·2·30·u·(30·max\|F\|)²·max\|P\| ≈ 1.1e-10·max\|P\|(max\|F\| ≤ 3)。詳細は [math-tolerance-proposal.md](math-tolerance-proposal.md) | 2026-10-30 | なし(B のゴールデン出力と、A・B の解析解との誤差だけを見た) |
