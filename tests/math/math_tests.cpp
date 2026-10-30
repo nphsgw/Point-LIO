@@ -321,4 +321,22 @@ TEST(Predict, CovarianceStaysSymmetricPositive)
     }
 }
 
+// --- 初期姿勢(ImuProcess::Set_init) ---
+
+// 台帳 BL-009: 測った重力が設定の重力とちょうど逆向きのとき、A は回転でない -I(行列式 −1)を返す
+TEST(SetInit, AntiParallelGravityGivesRotation)
+{
+    for (const Eigen::Vector3d &g : {Eigen::Vector3d(0, 0, -9.81), Eigen::Vector3d(0, 0, 9.81),
+                                     Eigen::Vector3d(Eigen::Vector3d(1, -2, 3).normalized() * 9.81)}) {
+        ImuProcess p;
+        p.gravity_ = g;
+        Eigen::Vector3d t = -g;
+        Eigen::Matrix3d r;
+        p.Set_init(t, r);
+        EXPECT_LE(max_abs(r.transpose() * r - Eigen::Matrix3d::Identity()), 1e-15) << g.transpose();
+        EXPECT_NEAR(r.determinant(), 1.0, 1e-15) << g.transpose();
+        EXPECT_LE((r * g - t).norm(), 1e-14 * g.norm()) << g.transpose();
+    }
+}
+
 }  // namespace

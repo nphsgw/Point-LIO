@@ -57,7 +57,11 @@ void ImuProcess::Set_init(Eigen::Vector3d &tmp_gravity, Eigen::Matrix3d &rot)
     }
     else
     {
-      rot = -Eye3d;
+      // BL-009: 逆向きのときは、重力に垂直な軸 a まわりの 180° 回転 2·a·aᵀ − I にする(-I は鏡映で回転ではない)
+      int i;
+      gravity_.cwiseAbs().minCoeff(&i);
+      V3D axis = gravity_.cross(V3D::Unit(i)).normalized();
+      rot = 2.0 * axis * axis.transpose() - Eye3d;
     }
   }
   else
