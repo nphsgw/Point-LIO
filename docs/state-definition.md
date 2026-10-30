@@ -150,4 +150,4 @@ L2 のゴールデン出力をビット一致で比べるので、式の形も�
 
 ## 9. 起票候補(台帳)
 
-- `ImuProcess::Set_init`(`src/IMU_Processing.cpp` 52〜61 行)は、測った重力と設定の重力がちょうど逆向き(`align_norm < 1e-6` かつ `align_cos ≤ 1e-6`)のとき `rot = -Eye3d` を代入する。行列式が −1 で、回転ではない(鏡映)。実行では未確認。
+- `ImuProcess::Set_init`(`src/IMU_Processing.cpp` 52〜61 行)は、測った重力と設定の重力がちょうど逆向き(`align_norm < 1e-6` かつ `align_cos ≤ 1e-6`)のとき `rot = -Eye3d` を代入する。行列式が −1 で、回転ではない(鏡映)。台帳の BL-009 に起票し、B で直すと決めた(2026-10-30)。
