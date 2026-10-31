@@ -335,6 +335,7 @@ struct SO3 : public Eigen::Matrix<_scalar, 3, 3> {
 	 * Only guarantees that <code>exp(log(x)) == x </code>
 	 */
 	static Eigen::Vector3d log(const SO3 &orient){
+		// Preserve the existing small-angle decision, including its trace threshold.
 		double theta = (orient.trace() > 3.0 - 1e-6) ? 0.0 : std::acos(0.5 * (orient.trace() - 1));
     	Eigen::Matrix<double,3,1> K(orient(2,1) - orient(1,2), orient(0,2) - orient(2,0), orient(1,0) - orient(0,1));
     	double c = 0.5 * (orient.trace() - 1);
@@ -349,7 +350,12 @@ struct SO3 : public Eigen::Matrix<_scalar, 3, 3> {
         	if (a.dot(K) < 0) a = -a;
         	return std::atan2(0.5 * K.norm(), c) * a;
     	}
-    	return (std::abs(theta) < 0.001) ? (0.5 * K) : (0.5 * theta / std::sin(theta) * K);
+		if (std::abs(theta) < 0.001) return 0.5 * K;
+		// BL-011: avoid amplifying trace error through acos and a recomputed sin.
+		// Use K's norm both to recover the angle and to normalize the axis.
+		const double k_norm = K.norm();
+		const double angle = std::atan2(0.5 * k_norm, c);
+		return (angle / k_norm) * K;
 	}
 };
 

@@ -4,6 +4,8 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <random>
 
@@ -140,6 +142,31 @@ TEST(So3Log, InvertsExp)
         Eigen::Vector3d w = SO3d::log(SO3d(rodrigues(v)));
         EXPECT_LE((w - v).norm(), 1e-12) << "angle " << v.norm();
     }
+}
+
+// BL-011: rounded input R amplified trace error in the acos-based normal path.
+// Fixed bits from docs/math-log-l1-reproduction.md; retain the original 1e-12.
+TEST(So3Log, InvertsRoundedRotationBL011)
+{
+    auto from_bits = [](uint64_t bits) {
+        double value;
+        std::memcpy(&value, &bits, sizeof(value));
+        return value;
+    };
+    Eigen::Vector3d v(from_bits(0xc0052889165ec0c2ULL), from_bits(0x3fe97bf35e541585ULL),
+                      from_bits(0xbff75a8559c5151bULL));
+    const uint64_t bits[] = {
+        0x3fdbbe5539650384ULL, 0xbfdb18dce9eb1e75ULL, 0x3fe974c0a7d7e313ULL,
+        0xbfdc25aeb5f0ee9fULL, 0xbfebd61caea14362ULL, 0xbfcc95d7b3ad77e5ULL,
+        0x3fe92b6a9e24735fULL, 0xbfd0320598cac0f6ULL, 0xbfe206874f7eb430ULL};
+    Eigen::Matrix3d r;
+    int count = 0;
+    for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 3; ++col, ++count) r(row, col) = from_bits(bits[3 * row + col]);
+    ASSERT_EQ(count, 9);
+    const Eigen::Vector3d w = SO3d::log(SO3d(r));
+    ASSERT_TRUE(w.allFinite());
+    EXPECT_LE((w - v).norm(), 1e-12);
 }
 
 TEST(So3Log, SmallAngleBranchErrorBound)
