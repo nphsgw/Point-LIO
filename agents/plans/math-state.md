@@ -1,9 +1,9 @@
 # プラン: 数学と状態の表現(C の最初の範囲)
 
-状態: 草案(2026-10-31)。派生イメージ・自前の固定長行列型・sincos FFI の3点は人が承認済み。プラン全体の承認と、実装とは別セッションでのレビューは未完了。
+状態: 草案(2026-10-31)。派生イメージ・自前の固定長行列型・sincos FFI の3点は人が承認済み。sincos FFI は、最初の承認の理由(「Rust は sin・cos を別々に呼ぶ」)が別セッションのレビューで誤りと分かったため、書き直した理由(3.3)で再承認した(2026-10-31)。プラン全体の承認は未完了。別セッションのレビュー(2026-10-31)の指摘を反映した。
 元資料: [計画書](../../docs/rust-reimplementation-verification-plan.md) §6・フェーズ3・決定事項(2026-10-30 の3、2026-10-31)、[状態の定義](../../docs/state-definition.md)、[事前登録の付録](../../docs/metrics-preregistration.md#付録-範囲ごとの基準)、[基準の根拠](../../docs/math-tolerance-proposal.md)、[注入による確認](../../docs/math-injection-validation.md)、[ゴールデン出力](../../golden/math/README.md)、[台帳](../../docs/bug-ledger.md) BL-008・BL-009
 
-「実測」は 2026-10-31 に固定イメージ(`point-lio-noetic:pinned`、ID `sha256:4ffccd04…`)の中で確かめたもの。「要確認」は未決定か未検証。
+「実測」は 2026-10-31 に固定イメージ(`point-lio-noetic:pinned`、ID `sha256:4ffccd04…`)の中で確かめたもの。ただし「実測(ホストの rustc)」は、ホストの rustc 1.99.0(LLVM 23.1.1)で生成した命令列を見たもので、数値は比べていない。「要確認」は未決定か未検証。
 
 ## 1. 概要
 
@@ -44,7 +44,9 @@ docker/
 ```
 
 - **Docker の土台**: `docker/Dockerfile` に足さず、`point-lio-noetic:pinned` から派生したイメージ `point-lio-rust` を別に作る。元のイメージを作り直さないので、apt の版が配布元から消えるリスク(計画書のリスク)を負わず、glibc 2.31(`2.31-0ubuntu9.18`、2026-10-31 に `dpkg-query -W libc6` で確認)の libm が B と同じになる。タグは書き換えられるので、`build_rust_image.sh` が土台のイメージ ID を `sha256:4ffccd04…` と照合してから作る。
-- **ツールチェーンの固定**: rustup-init は版(1.29.1、ホストと同じ)と SHA256 で固定し、イメージを作るときに 1.99.0 を入れる。実行時は `--network none` で動かし、ダウンロードが起きないことを保証する。
+- **ツールチェーンの固定**: rustup-init は版(1.29.1、ホストと同じ)と SHA256 で固定し、イメージを作るときに 1.99.0 を、`rust-toolchain.toml` と同じ profile と components(rustfmt・clippy)で入れる。足りない component があると、実行時に rustup がダウンロードしようとして失敗する。実行時は `--network none` で動かし、ダウンロードが起きないことを保証する。
+- **作業ディレクトリ**: C++ のスクリプトと同じく、リポジトリは読み取り専用で mount する。`CARGO_TARGET_DIR` はコンテナ内(`--rm` で消える)に置く。`Cargo.lock` は手順1で1回だけ、`rust/` を書き込み可能に mount して `cargo generate-lockfile --offline` で作ってコミットし、以降は `--locked` で使う。
+- **照合器の版**: 照合器はホストの `python3` で動かす(注入による確認と同じ)。`run_math_golden.sh` は `python3 --version` を出力ディレクトリに記録する(§6 の条件4)。
 - **依存クレート**: なし(3.2)。`Cargo.lock` はワークスペースの crate だけになる。オフラインでビルドできる。
 - **ビルドの設定**: `RUSTFLAGS`・`target-cpu`・`.cargo/config.toml` の rustflags を設定しない(x86-64 の基本命令だけ。FMA なし。B の V0 と同じ)。Rust(LLVM)は `mul_add` を書かない限り積和を結合せず、`-ffast-math` 相当もない。照合は `--release`(opt-level 3)で行い、debug でも出力がバイト単位で同じことを確かめる(5 節)。
 - **ホストで動かさない**: ホストにも 1.99.0 があるが、ホストの glibc の libm が混ざると B→C の差に libm の版の違いが入る(2026-10-30 の決定)。
@@ -57,11 +59,13 @@ nalgebra を使わず、固定長の配列の型を自前で書く。各演算�
 
 | Eigen の式(B での使用箇所) | 実測した順(20万件でビット一致) |
 | --- | --- |
-| `Matrix3d::trace()`(Log の θ と c) | d₀ + (d₁ + d₂)。左からの順 (d₀ + d₁) + d₂ とは 22% で異なる |
+| `Matrix3d::trace()`(Log の θ と c) | d₀ + (d₁ + d₂)。左からの順 (d₀ + d₁) + d₂ とは 22% で異なる(割合は入力の分布による。成分が一様乱数の行列では 7%) |
 | `Vector3d::norm()`(Exp の ‖θ‖、Log の ‖K‖) | sqrt((x₀² + x₁²) + x₂²) |
 | `s * A * B`(3×3。Exp と A 行列の `(1 − cos) * K * K`) | スカラーは左の行列に先に掛かる(s·A_ik)·B_kj。0・1 行目は左からの順 (a₀ + a₁) + a₂、**2 行目は a₀ + (a₁ + a₂)**(SSE2 のパケットで2行、残りの1行をスカラーの縮約で計算するため) |
 
-**要確認(手順2で実測する)**: `A.transpose() * B`(boxminus。ビット一致が要る)、スカラーなしの `A * B`(boxplus の R·Exp(δ))、`A * v`(`rot * acc`、予測の A 行列 × 列)、`-A * B`(`df_dx_output` の −rot·[acc]×)、`a.dot(K)`(Log の π の近くの分岐)、`normalized()`(Eigen 3.3.7 のソースでは v / sqrt(squaredNorm) の成分ごとの割り算)、`maxCoeff(&i)`(同値なら最初の添字)。要素ごとの和(`I + s₁K + X`、`0.5 * (R + Rᵀ) − c·I`、`F += f_x_final * dt`)は式の左から順に評価される見込みで、これも手順2で確かめる。
+**要確認(手順2で実測する)**: `A.transpose() * B`(boxminus。ビット一致が要る)、スカラーなしの `A * B`(boxplus の R·Exp(δ))、`A * v`(`rot * acc`、予測の A 行列 × 列)、`-A * B`(`df_dx_output` の −rot·[acc]×)、`a.dot(K)`(Log の π の近くの分岐)、`S.col(i).normalized()`(Eigen 3.3.7 の `Dot.h` 124〜132 行では、z = squaredNorm が z > 0 のときだけ v / sqrt(z) の成分ごとの割り算、そうでなければ v をそのまま返す)、`maxCoeff(&i)`(同値なら最初の添字)。要素ごとの和(`I + s₁K + X`、`0.5 * (R + Rᵀ) − c·I`、`F += f_x_final * dt`)は式の左から順に評価される見込みで、これも手順2で確かめる。
+
+参考(別セッションのレビューでの実測、各20万件。`noinline` の単体の関数で測ったもので、B の関数に inline された形ではない。手順2の実測の代わりにしない): `A.transpose() * B` は**全行が**左からの順。スカラーなしの `A * B` と `A * v` は `s * A * B` と同じく2行目だけ a₀ + (a₁ + a₂)。`S.col(i).normalized()` の squaredNorm と `a.dot(K)` は左からの順。`I + s₁K + s₂·K·K` は ((I + s₁K) + X)。零ベクトルの `normalized()` は零を返す。したがって boxminus の `Rᵀ·R` に、通常の積の関数を流用してはいけない(2行目の順が違う)。
 
 **避けられない違い(一覧に載せる)**: `predict_cov` の 30×30 の積 `F * P * Fᵀ`。Eigen はブロック化した GEMM で計算し、和の順はカーネルの実装に依存する。C は (F·P)·Fᵀ の結合を保ち、各要素を k の昇順で足す。登録済みの r = 1e-10 はこの違いを見込んだもの(math-tolerance-proposal.md 3 節)。
 
@@ -69,15 +73,19 @@ nalgebra を使わず、固定長の配列の型を自前で書く。各演算�
 
 ### 3.3 libm: B が呼ぶ関数をそのまま呼ぶ
 
-実測: B の `math_golden` と `pointlio_offline` では、GCC が同じ引数の `std::sin` と `std::cos` を glibc の `sincos` 1回にまとめている。対象は `MTK::SO3::exp`、`MTK::A_matrix`、so3_math.h の `Exp(v1, v2, v3)`。`SO3::log` は `acos`・`atan2`・`sin` を個別に呼ぶ。
+実測: B の `math_golden` と `pointlio_offline` では、GCC が同じ引数の `std::sin` と `std::cos` を glibc の `sincos` 1回にまとめている。対象は `MTK::SO3::exp`、`MTK::A_matrix`、so3_math.h の `Exp(v1, v2, v3)`。`SO3::log` は `acos`・`atan2`・`sin` を個別に呼ぶ。別セッションのレビューで、両バイナリの逆アセンブルを関数ごとに見て、`sincos` の呼び出しはこの3関数の本体だけにあり、inline された箇所で `sin`・`cos` を別々に呼ぶものがないことを確かめた。
 
-glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なることがある(実測: 回転角 0.001〜π の範囲で、100万件あたり 36〜1829 件が 1 ulp 程度違う。1e-3 未満では0件)。Rust の `f64::sin`・`f64::cos` は glibc の `sin`・`cos` を個別に呼び、LLVM は(unsafe-fp-math なしでは)`sincos` にまとめない。ビット一致を求める `a_matrix` で別々に呼ぶと、入力の 0.1〜0.2% で落ちる見込みになる。
+glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なることがある(実測: 回転角 0.001〜π の範囲で、100万件あたり 36〜1829 件が 1 ulp 程度違う。1e-3 未満では0件)。ビット一致を求める `a_matrix` で別々に呼ぶと、入力の 0.1〜0.2% で落ちる見込みになる。
 
-そのため C は、B が `sincos` を呼ぶ3か所で glibc の `sincos` を FFI で呼ぶ。
+Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変わる(実測(ホストの rustc)): opt-level 3 では、LLVM が同じ引数の `sin` と `cos` を `sincos` 1回にまとめる。opt-level 0 では別々に呼ぶ。まとめるかどうかは、2つが同じ基本ブロックにあるかにも依存する。`f64` のままでは、release と debug で呼ぶ関数が変わり、コードの形の小さな変更でも変わりうる。
 
-- `unsafe` は `src/libm.rs` の1モジュールに隔離する(`unsafe extern "C" { fn sincos(x: f64, s: *mut f64, c: *mut f64); }` と、1つの `unsafe` 呼び出しブロックを包む安全な関数)。宣言1件と呼び出しブロック1件を別々に数え、行数も記録する。前提条件(2つのポインタは呼び出し側のスタック上の有効な `f64` を指し、glibc は書くだけで保持しない)をコメントに書く。crate 全体は `#![deny(unsafe_code)]` とし、このモジュールだけ許す。
+そのため C は、B が `sincos` を呼ぶ3か所で glibc の `sincos` を FFI で呼び、どのビルドでも B と同じ関数を呼ぶようにする。最初の FFI の承認は「Rust は別々に呼ぶ」という誤った理由に基づいていたので、この理由で再承認した(2026-10-31、計画書の決定事項 2026-10-31 の9)。`f64` のまま opt-level 3 の LLVM のまとめに頼る案は、unsafe は要らないが、debug との一致と、まとめが起きることの保証を失うので採らない。
+
+- `unsafe` は `src/libm.rs` の1モジュールに隔離する(`unsafe extern "C" { fn sincos(x: f64, s: *mut f64, c: *mut f64); }` と、1つの `unsafe` 呼び出しブロックを包む安全な関数)。宣言1件と呼び出しブロック1件を別々に数え、行数も記録する。前提条件(2つのポインタは呼び出し側のスタック上の有効な `f64` を指し、glibc は書くだけで保持しない)をコメントに書く。crate 全体は `#![deny(unsafe_code)]` とし、このモジュールだけ許す。リンクの先を std に頼らないよう、宣言に `#[link(name = "m")]` を付ける。
 - FFI の箇所なので、ルールどおりメモリ安全レビュー担当の確認を受ける。
-- 単独で必要な `sin`・`acos`・`atan2` は Rust の標準ライブラリから呼び、`sincos` とともに glibc の同名の関数に解決されることをビルド後の `nm -D` で確かめる(5 節)。`cos` は既定版では単独に呼ぶ必要がなく、シンボルの存在を必須にしない。`sincos` を外す比較用の版では、使用する `sin`・`cos` の解決先を別途記録する。`sqrt` は両方とも命令(`sqrtsd`)で、正しく丸められる。
+- 単独で必要な `sin`・`acos`・`atan2` は Rust の標準ライブラリから呼び、`sincos` とともに glibc の同名の関数に解決されることをビルド後の `nm -D` で確かめる(5 節)。`cos` は既定版では単独に呼ぶ必要がなく、シンボルの存在を必須にしない。`sqrt` は両方とも命令(`sqrtsd`)で、正しく丸められる。
+- `nm -D` はシンボルがあることしか示さず、FFI の `sincos` と LLVM がまとめた `sincos` を区別できない。そこで release と debug の両方の `math_golden` を逆アセンブルし(`objdump -d -C`)、関数ごとに呼び出しを確かめる: `so3::exp`・`so3::a_matrix`・`so3::exp3` の呼ぶ `sincos` は FFI の1か所だけ、`so3::log` は `acos`・`atan2`・`sin` だけ、それ以外の関数は三角関数を呼ばない。inline で関数の境界が消えて確かめられない場合は、確かめた範囲と方法を記録する。
+- `sincos` を外す比較用の版は、opt-level 3 では LLVM がまた `sincos` にまとめるので、何も比べられない。`sin` と `cos` の間に `std::hint::black_box` を挟んでまとめを防ぎ、逆アセンブルで別々に呼ぶことを確かめてから照合する。
 - glibc の libm は CPU に応じて実装を選ぶ(ifunc)。B と C は同じ機械で比べ、CPU を記録する(既存の方針どおり)。
 
 ### 3.4 型と演算
@@ -85,7 +93,7 @@ glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なるこ�
 | C++ の対象 | Rust の対象 | 差異・注意 |
 | --- | --- | --- |
 | `MTK::SO3<double>::exp`(`include/IKFoM/IKFoM_toolkit/mtk/types/SOn.hpp`) | `so3::exp(v, scale)` | ang = v·scale。‖ang‖ > 1e-7 のときだけロドリゲス、それ以外はちょうど I。r_axis = ang / ‖ang‖(割り算)。`(I + sin·K) + ((1 − cos)·K)·K`。sin・cos は `sincos` |
-| `SO3::log`(BL-008 の修正後) | `so3::log` | θ の閾値(tr > 3 − 1e-6)、c < −1 + 5e-8 の分岐(対称な部分、`maxCoeff`、`normalized`、K との内積で向き、`atan2(0.5·‖K‖, c)`)、\|θ\| < 0.001 の 0.5·K。トレースは式に現れる回数だけ計算し直す(値は同じ) |
+| `SO3::log`(BL-008 の修正後) | `so3::log` | θ の閾値(tr > 3 − 1e-6)、c = 0.5·(tr − 1) < −1 + 5e-8 の分岐(対称な部分、`maxCoeff`、`normalized`、K との内積で向き、`atan2(0.5·‖K‖, c)`)、\|θ\| < 0.001 の 0.5·K、それ以外は **((0.5·θ)/sin θ)·K** の結合。トレースは式に現れる回数だけ計算し直す(値は同じ)。対称な部分 S = 0.5·(R + Rᵀ) − c·I は、**非対角でも c·0 を引く**(c < 0 なので −0 を引き、−0 の和が +0 になる。照合器はビット一致の部品で生のバイトを比べるので、符号付き零の違いも不一致になる)。`normalized` は z = squaredNorm が z > 0 のときだけ割り、そうでなければ列をそのまま返す。この分岐の中では tr(S) = 1.5 − 0.5·tr(R) > 2 なので、対角の最大は正で、選んだ列は零にならない(NaN の入力を除く)。零の場合は到達しないのでテストを足さないが、式は Eigen と同じ形で写す |
 | `SO3::boxplus`・`oplus` | `so3::boxplus` | R·Exp(s·δ)(右から) |
 | `SO3::boxminus` | `so3::boxminus` | Log(R₂ᵀ·R₁)。積の順は手順2で実測 |
 | `MTK::A_matrix`(`mtk/src/mtkmath.hpp`) | `so3::a_matrix` | ノルムは `sqrt((v₀v₀ + v₁v₁) + v₂v₂)` と明示の式。‖v‖ < 1e-11 なら I。`(I + ((1 − cos)/sq)·[v]×) + (((1 − sin/n)/sq)·[v]×)·[v]×`。sin・cos は `sincos` |
@@ -94,7 +102,7 @@ glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なるこ�
 | `state_output`(`include/common_lib.h`) | `state::StateOutput` | 成分の並び・30 次元の添字は state-definition.md 4 節。回転は `Mat3`(回転行列。クォータニオンで持たない)。正規化しない |
 | `state_output::boxplus`・`boxminus`・`oplus` | `StateOutput::boxplus`・`boxminus`・`oplus` | 宣言順に成分ごと。vect は `v + s·δ`(s = 1 でも掛け算を残す)。SO3 は上の boxplus |
 | `get_f_output`・`df_dx_output`(`src/Estimator.cpp`) | `process::f_output`・`df_dx_output` | 入力 `input_ikfom` を受けない(範囲内では参照されない) |
-| `esekf::predict`(`include/IKFoM/IKFoM_toolkit/esekfom/esekfom.hpp` 137〜183 行) | `esekf::predict(x, p, q, dt, predict_state, prop_cov)` | 状態: x ⊕ (f·dt)。共分散: f_x_final の行の並べ替え、SO3 の行ブロックは A(−f·dt)·(列ごとの 3×1)、F の SO3 の対角は Exp(−f·dt)、`F += f_x_final·dt`、`(F·P)·Fᵀ + Q·(dt·dt)`。対称化しない。状態の型が固定なので、MTK の `vect_state`・`SO3_state` の表は持たず、添字を直接書く |
+| `esekf::predict`(`include/IKFoM/IKFoM_toolkit/esekfom/esekfom.hpp` 137〜183 行) | `esekf::predict(x, p, q, dt, predict_state, prop_cov)` | 状態: x ⊕ (f·dt)。共分散: f_x_final の行の並べ替え、SO3 の行ブロックは A(−f·dt)·(列ごとの 3×1)、F の SO3 の対角は Exp(−f·dt)、`F += f_x_final·dt`、`(F·P)·Fᵀ + Q·(dt·dt)`。対称化しない。状態の型が固定なので、MTK の `vect_state`・`SO3_state` の表は持たず、添字を直接書く。2つのフラグがともに true のときは、C++ と同じく、状態を進めた**後の** x で f と f_x を計算し直してから共分散を進める。この組み合わせはゴールデン出力に含まれず、イベントループも使わない(`src/laserMapping.cpp` 615〜748 行は、どちらか一方だけを立てる)ので、範囲内では確かめない |
 
 - 行列の持ち方は `[[f64; 3]; 3]` の行優先(`m[r][c]`)。Eigen は列優先だが、この範囲では配列として受け渡さないので、演算の順だけを合わせる。PLGOLD01 は行優先なので、読み書きは添字の対応だけで済む。
 - 範囲外の分岐(`kf_input`、S2)は型に入れない。
@@ -113,10 +121,12 @@ glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なるこ�
 | 台帳 ID／要件 | 前提・入力 | 操作 | 期待結果と許容誤差 | 出典 | 種別 |
 | --- | --- | --- | --- | --- | --- |
 | J4(付録) | `golden/math` の13ファイル(SHA256 一致)の入力 | `rust/run_math_golden.sh <出力>` で C の出力を作り、`compare_math_golden.py golden/math <出力>` | 終了コード0。付録の (a, r): ビット一致4部品、64u の8部品、`predict_cov` 1e-10。分岐の違いは例外にしない | B のゴールデン出力(golden/math/README.md) | 結合 |
-| Red の確認 | 同上 | 実装前に、全部品が NaN を返す仮の実装で同じ操作 | 終了コード2(不正なデータ)。全部品が 0 を返す仮の実装で終了コード1 | 照合器の契約(math-injection-validation.md) | 結合 |
+| Red の確認 | 同上 | 実装前に、全部品が NaN を返す仮の実装で同じ操作 | 終了コード2(不正なデータ)。全部品が 0 を返す仮の実装で終了コード1、かつ13部品すべてが `FAIL` の行になる(行の数を確かめる) | 照合器の契約(math-injection-validation.md) | 結合 |
+| BL-008 の修正を戻すと落ちる | 実装後の C | `so3::log` から c < −1 + 5e-8 の分岐を外した版(A の式)を一時的に作り、L1 と照合を実行する | `So3Log.FiniteNearPi`・`So3Log.AccurateAroundNearPiBranch` に対応する L1 が落ち、照合で `so3_log` が `FAIL`(π の近くの記録で不一致、または NaN で終了コード2)。確かめたら版を捨て、コミットしない | testing.md(修正を戻すとテストが落ちること)、台帳 BL-008 | 単体・結合 |
 | 最適化の影響 | 同上 | `--release` と debug の両方で C の出力を作る | 13ファイルがバイト単位で一致(どちらも照合器を通る) | Rust の浮動小数点の意味論(fast-math なし)からの予想 | 性質 |
 | 3.3 libm | `--release` の `math_golden` | `nm -D` | `sin`・`acos`・`atan2`・`sincos` が `GLIBC_*` の未定義シンボルとして現れる。既定版での単独の `cos` は必須にしない | 3.3 の設計 | 性質 |
-| 3.3 の根拠の記録(合否にしない) | 同上 | `sincos` を別々の `sin`・`cos` に替えた版で照合 | 落ちる部品と件数を記録する(落ちなくても失敗としない。0.1〜0.2% なので記録の数によっては落ちない) | 3.3 の実測 | 記録 |
+| 3.3 libm の呼び出し箇所 | `--release` と debug の `math_golden` | `objdump -d -C` で関数ごとの三角関数の呼び出しを数える | 3.3 のとおり(`sincos` は FFI の3か所だけ、`so3::log` は `acos`・`atan2`・`sin`、ほかは呼ばない)。確かめられなかった関数は記録する | 3.3 の設計、B の逆アセンブル | 性質 |
+| 3.3 の根拠の記録(合否にしない) | 同上 | `sincos` を、`black_box` を挟んだ別々の `sin`・`cos` に替えた版で照合。先に逆アセンブルで別々に呼ぶことを確かめる | 落ちる部品と件数を記録する(落ちなくても失敗としない。0.1〜0.2% なので記録の数によっては落ちない) | 3.3 の実測 | 記録 |
 | L1: Exp | 回転角 2e-7〜3.14 の 120 件 | 別の形のロドリゲス(cos·I + sin·[a]× + (1 − cos)·aaᵀ)と比べる | 成分の最大差 ≤ 8e-15。件数 120 を確かめる | math_tests.cpp `So3Exp.MatchesAxisAngle`(同じ許容誤差) | 単体 |
 | L1: Exp の閾値 | 回転角 1e-9〜1e-7 | `exp` | ちょうど I、真値との差 ≤ ‖θ‖·1.0001 | 同 `BelowThresholdReturnsIdentityWithinAngle` | 単体 |
 | L1: 回転 | 回転角 1e-6〜π の 200 件 | `exp` | ‖RᵀR − I‖_max ≤ 8e-15、\|det R − 1\| ≤ 8e-15 | 同 `IsRotation` | 性質 |
@@ -127,7 +137,8 @@ glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なるこ�
 | L1: 予測の共分散 | dt 0.005・0.1、各 10 件 | 状態の伝播の中心差分で F を作り F·P·Fᵀ + Q·dt² | 最大差 ≤ 1e-7·max\|expected\|。共分散だけの呼び出しで状態が変わらない | 同 `Predict.CovarianceMatchesNumericJacobian` | 単体 |
 | L1: 予測の共分散の性質 | 20 件 | `predict` | 非対称 ≤ 1e-13·m、最小固有値 ≥ −1e-12·m | 同 `Predict.CovarianceStaysSymmetricPositive` | 性質 |
 
-- L1 の参照(別の形のロドリゲス、別の Log、数値微分)は、テスト側に実装と独立に書く。C++ のテストが使う Eigen の `AngleAxisd` の代わりに、Log の参照はクォータニオン経由の別の式にする。最小固有値は、テスト側に Jacobi 法を書いて求める。
+- L1 の参照のうち、別の形のロドリゲス(cos·I + sin·[a]× + (1 − cos)·aaᵀ)、別の Log、最小固有値は、テスト側に実装と独立に書く。C++ のテストが使う Eigen の `AngleAxisd` の代わりに、Log の参照はクォータニオン経由の別の式にする。最小固有値は、テスト側に Jacobi 法を書いて求める。
+- 数値微分のテスト(`ProcessModel.JacobianMatchesNumeric`、`Predict.CovarianceMatchesNumericJacobian`)は、C++ と同じく、摂動と差に**実装の** `StateOutput::boxplus`・`boxminus`・`oplus` と `process::f_output` を使う。テスト側に書き直すと、その参照を別に確かめる手段が要るため。したがって、この2件が確かめるのは「Jacobian・共分散の伝播が、実装の状態の演算と整合すること」であり、boxplus・boxminus・Exp 自体の正しさは、上の Exp・Log・boxplus・boxminus のテストが独立の参照で確かめる。
 - L1 の許容誤差は math_tests.cpp と同じ値にし、新たに決めない。乱数は C++ の `std::mt19937_64` と同じ列を再現しない(L1 は解析解との比較なので、入力が同じである必要はない)。
 - ループの検査は件数も確かめる(testing.md)。
 - 範囲外の L1(`SetInit.*`、`IVoxClosest.*`)は移さない。
@@ -139,7 +150,7 @@ glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なるこ�
 3. **PLGOLD01 の読み書きと Red**: `golden.rs`、`bin/math_golden.rs`、`run_math_golden.sh`。全部品を仮の実装(NaN、0)にして、照合器が終了コード2・1を返すことを確かめる。
 4. **L1 テストを先に書く**(5 節)。実装前に失敗することを確かめる。
 5. **実装**: `linalg` → `libm` → `so3`(exp、log、boxplus、boxminus、a_matrix、exp3、quat)→ `state` → `process` → `esekf`。部品ごとに照合器を通し、ビット一致の部品で落ちたら、和の順を手順2の表と照らす。表で説明できない不一致は、基準を広げずに停止して報告する(math-tolerance-proposal.md 4 節の選択肢)。
-6. **残りの検査**: debug と release のバイト一致、`nm -D`、`sincos` を外した版の記録、`cargo clippy`、`unsafe` の数え上げ。
+6. **残りの検査**: debug と release のバイト一致、`nm -D` と関数ごとの逆アセンブル、`sincos` を外した版の記録、BL-008 の修正を戻した版で落ちること、`cargo clippy`、`unsafe` の数え上げ。
 7. **CLAUDE.md の更新**: 作ったコマンドで「Rust ビルド・テスト」の行を確定し、未作成の注記を外す。
 8. **別セッションでの差分レビュー**(agents/README.md の手順4)と、FFI のメモリ安全レビュー。
 
@@ -151,7 +162,7 @@ glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なるこ�
 | --- | --- | --- | --- |
 | 単体テスト(L1) | リポジトリ直下(Docker) | `rust/run.sh test --release --locked --offline` | `point-lio-rust`(手順1で作る) |
 | ゴールデン出力との比較 | リポジトリ直下(Docker、照合はホストの `python3`) | `rust/run_math_golden.sh <新しい出力ディレクトリ>`(中で `compare_math_golden.py golden/math <出力>` を呼ぶ) | `golden/math/SHA256SUMS` の一致、`point-lio-rust` |
-| 性質テスト | リポジトリ直下(Docker) | 単体テストに含む。debug/release の一致と `nm -D` は `run_math_golden.sh` に含める | 同上 |
+| 性質テスト | リポジトリ直下(Docker) | 単体テストに含む。debug/release の一致、`nm -D`、関数ごとの逆アセンブルは `run_math_golden.sh` に含める | 同上 |
 | 照合器の契約テスト(変えていないことの確認) | リポジトリ直下 | `python3 -B tests/math/test_compare_math_golden.py` | — |
 | 静的検査 | リポジトリ直下(Docker) | `rust/run.sh clippy --release --locked --offline -- -D warnings` | 同上 |
 
@@ -179,4 +190,13 @@ glibc 2.31 の `sincos` は、別々の `sin`・`cos` と結果が異なるこ�
 - 人の判断: `point-lio-rust` の派生イメージ、自前の固定長行列型、glibc `sincos` の FFI を承認。プラン全体の承認とは区別する。
 - このセッションでの点検: L1 の14件の対応を明記、実測した libc6 の版を訂正、curl の導入済みを確認、単独の cos を必須シンボルから除外、unsafe の宣言と呼び出しブロックを分けて記録するよう明記した。
 - プラン全体の別セッションレビュー、rustup-init の SHA256、Eigen の残りの演算順、Rust 実装の検証は未完了。
+
+## 別セッションのレビューの反映(2026-10-31)
+
+- 3.3: 「LLVM は sincos にまとめない」は誤りだった(ホストの rustc 1.99.0 で、opt-level 3 ではまとめ、0 ではまとめない)。理由を書き直し、その理由で FFI を再承認した(人の判断)。比較用の版を `black_box` で作り、関数ごとの逆アセンブルの検査を足した。
+- 3.4: Log の `((0.5·θ)/sin θ)·K` の結合、S の非対角で c·0 を引くこと、`normalized` の z > 0 の分岐(到達しないことの理由も)を書いた。predict の両フラグの動作を書いた。
+- 5 節: BL-008 の修正を戻すと落ちることの確認、零を返す仮の実装で13部品すべてが FAIL になることの確認を足した。数値微分のテストが実装の状態の演算を使うことを明記した。
+- 3.1・3.3: component の導入、読み取り専用の mount と `CARGO_TARGET_DIR`、`Cargo.lock` の作り方、`#[link(name = "m")]`、照合器の Python の版の記録を足した。
+- 3.2: レビューでの参考の実測(`noinline` の関数で測ったもの)を追記した。手順2の実測は残る。
+- 3点の人の承認を、計画書の決定事項(2026-10-31)の7〜9に記録した。sincos FFI は書き直した理由で再承認した。
 - 既存スクリプトを実行: `bash tests/math/run_math_tests.sh` は全16件通過、`bash tests/math/run_math_golden.sh check` は全13部品通過。どちらも終了コード0。latest と pinned は同じ ID `sha256:4ffccd043d071a088d7b09e80eb78cbef3b61d777e2b4f146768bac3def2dead` だった。livox のビルド失敗は再現しなかったため、今回は台帳に起票しない。別の失敗ログがある場合は、その実行条件との差を調べる。ログ: `/tmp/pointlio-plan-l1-20261031.log`、`/tmp/pointlio-plan-golden-20261031.log`。
