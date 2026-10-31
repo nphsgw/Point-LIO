@@ -63,9 +63,34 @@ nalgebra を使わず、固定長の配列の型を自前で書く。各演算�
 | `Vector3d::norm()`(Exp の ‖θ‖、Log の ‖K‖) | sqrt((x₀² + x₁²) + x₂²) |
 | `s * A * B`(3×3。Exp と A 行列の `(1 − cos) * K * K`) | スカラーは左の行列に先に掛かる(s·A_ik)·B_kj。0・1 行目は左からの順 (a₀ + a₁) + a₂、**2 行目は a₀ + (a₁ + a₂)**(SSE2 のパケットで2行、残りの1行をスカラーの縮約で計算するため) |
 
-**要確認(手順2で実測する)**: `A.transpose() * B`(boxminus。ビット一致が要る)、スカラーなしの `A * B`(boxplus の R·Exp(δ))、`A * v`(`rot * acc`、予測の A 行列 × 列)、`-A * B`(`df_dx_output` の −rot·[acc]×)、`a.dot(K)`(Log の π の近くの分岐)、`S.col(i).normalized()`(Eigen 3.3.7 の `Dot.h` 124〜132 行では、z = squaredNorm が z > 0 のときだけ v / sqrt(z) の成分ごとの割り算、そうでなければ v をそのまま返す)、`maxCoeff(&i)`(同値なら最初の添字)。要素ごとの和(`I + s₁K + X`、`0.5 * (R + Rᵀ) − c·I`、`F += f_x_final * dt`)は式の左から順に評価される見込みで、これも手順2で確かめる。
+**手順2の測定対象(2026-10-31 に測定済み。結果は下表)**: `A.transpose() * B`(boxminus。ビット一致が要る)、スカラーなしの `A * B`(boxplus の R·Exp(δ))、`A * v`(`rot * acc`、予測の A 行列 × 列)、`-A * B`(`df_dx_output` の −rot·[acc]×)、`a.dot(K)`(Log の π の近くの分岐)、`S.col(i).normalized()`(Eigen 3.3.7 の `Dot.h` 124〜132 行では、z = squaredNorm が z > 0 のときだけ v / sqrt(z) の成分ごとの割り算、そうでなければ v をそのまま返す)、`maxCoeff(&i)`(同値なら最初の添字)。要素ごとの和(`I + s₁K + X`、`0.5 * (R + Rᵀ) − c·I`、`F += f_x_final * dt`)も測定対象とした。
 
 参考(別セッションのレビューでの実測、各20万件。`noinline` の単体の関数で測ったもので、B の関数に inline された形ではない。手順2の実測の代わりにしない): `A.transpose() * B` は**全行が**左からの順。スカラーなしの `A * B` と `A * v` は `s * A * B` と同じく2行目だけ a₀ + (a₁ + a₂)。`S.col(i).normalized()` の squaredNorm と `a.dot(K)` は左からの順。`I + s₁K + s₂·K·K` は ((I + s₁K) + X)。零ベクトルの `normalized()` は零を返す。したがって boxminus の `Rᵀ·R` に、通常の積の関数を流用してはいけない(2行目の順が違う)。
+
+**手順2の測定結果(2026-10-31)**: `tests/math/eigen_order_probe.cpp` を固定イメージ内で `g++ -std=c++14 -O3 -g -pthread -fexceptions -fopenmp -Wall -Wextra -Werror -I/usr/include/eigen3` によりコンパイルした。gcc 9.4.0、Eigen 3.3.7、`-march`・`-ffast-math` なし、`OMP_NUM_THREADS=1`。seed = 20261031。乱数は `mt19937_64` の上位53ビットを 2⁵³ で割り、別の乱数ビットで符号を付ける。ビット比較には `memcmp` を使う。
+
+| 式 | 観測した順・動作 | 検査数 / 不一致数 |
+| --- | --- | --- |
+| `A.transpose() * B` | 全行が (a₀ + a₁) + a₂ | 20万行列、180万成分 / 0 |
+| `A * B`、`s * A * B`、`-A * B` | 0・1行目は左結合、2行目は a₀ + (a₁ + a₂)。スカラー・負号は左の行列に先に適用 | 各20万行列、180万成分 / 0 |
+| `A * v` | 0・1行目は左結合、2行目は右結合 | 20万ベクトル、60万成分 / 0 |
+| `a.dot(K)` | (a₀K₀ + a₁K₁) + a₂K₂ | 20万件 / 0 |
+| `trace()`、`norm()` | trace は d₀ + (d₁ + d₂)、norm は sqrt((x₀² + x₁²) + x₂²) | 各20万件 / 0 |
+| `S.col(i).normalized()` | 左結合の squaredNorm の平方根で各成分を割る。逆数を先に作って掛ける形とは異なる | 20万列、60万成分 / 0。零列は3成分 / 0 |
+| `maxCoeff(&i)` | 最大の対角成分の先頭添字。同値と符号付き零のケースも先頭 | 乱数20万件 + 同値7件 / 0 |
+| `I + s₁K + s₂·K·K` | (I + s₁K) + X。X の積は上記のスカラー付き積 | 20万行列、180万成分 / 0 |
+| `0.5 * (R + Rᵀ) − c·I` | 全成分で減算。非対角でも c·0 を引く | 20万行列、180万成分 / 0。符号付き零2成分 / 0 |
+| `F += J * dt` (30×30) | 各成分で Fᵢⱼ + (Jᵢⱼ·dt) | 2000行列、180万成分 / 0 |
+
+別の結合順・積の後のスカラー倍・正規化での逆数倍も比べ、それぞれ不一致が生じることを確認した(道具は代替候補の不一致が0なら失敗する)。例: 転置積を右結合にした候補は559450/1800000成分、通常の積を全行左結合にした候補は187347/1800000成分、正規化の逆数倍は155514/600000成分で異なった。
+
+再実行(リポジトリ直下):
+
+```bash
+docker run --rm --network none -e OMP_NUM_THREADS=1 -v "$PWD":/repo:ro point-lio-noetic:pinned bash -c 'g++ -std=c++14 -O3 -g -pthread -fexceptions -fopenmp -Wall -Wextra -Werror -I/usr/include/eigen3 /repo/tests/math/eigen_order_probe.cpp -o /tmp/eigen_order_probe && /tmp/eigen_order_probe'
+```
+
+この道具の関数境界は `noinline`。参考の記録を流用せず新しい seed と検査で測定したが、B の関数内に inline された形の順を証明するものではない。実際の部品で同じ順になるかは、手順5の L2 で確かめる。ビット一致が説明できず落ちた場合の停止条件は変えない。
 
 **避けられない違い(一覧に載せる)**: `predict_cov` の 30×30 の積 `F * P * Fᵀ`。Eigen はブロック化した GEMM で計算し、和の順はカーネルの実装に依存する。C は (F·P)·Fᵀ の結合を保ち、各要素を k の昇順で足す。登録済みの r = 1e-10 はこの違いを見込んだもの(math-tolerance-proposal.md 3 節)。
 
@@ -193,7 +218,7 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 
 - 人の判断: `point-lio-rust` の派生イメージ、自前の固定長行列型、glibc `sincos` の FFI を承認。プラン全体の承認とは区別する。
 - このセッションでの点検: L1 の14件の対応を明記、実測した libc6 の版を訂正、curl の導入済みを確認、単独の cos を必須シンボルから除外、unsafe の宣言と呼び出しブロックを分けて記録するよう明記した。
-- プラン全体の別セッションレビュー、rustup-init の SHA256、Eigen の残りの演算順、Rust 実装の検証は未完了。これは承認前の時点の記録。SHA256 の確認は、後述の「手順1の実施記録」で完了した。Eigen の演算順の確認は手順2で行う。
+- プラン全体の別セッションレビュー、rustup-init の SHA256、Eigen の残りの演算順、Rust 実装の検証は未完了。これは承認前の時点の記録。SHA256 と Eigen の演算順の確認は、後述の「手順1の実施記録」「手順2の実施記録」で完了した。
 
 ## 別セッションのレビューの反映(2026-10-31)
 
@@ -216,3 +241,9 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 - `rust/run.sh build --release --locked --offline` が、`--network none`、リポジトリの読み取り専用 mount、ホストと同じ UID/GID、コンテナ内の `CARGO_TARGET_DIR` で通過。`fmt --all -- --check` と `clippy --release --locked --offline -- -D warnings` も通過。これらは空の crate とビルド環境の検証であり、数学の L1・L2 を通過したとは扱わない。
 - 記録先: `/tmp/pointlio-rust-step12-20261031`。イメージのビルドログ、環境情報、公式チェックサムと実ファイルを置いた。`/tmp` は永続保管先ではない。
 - `unsafe`: 現時点で宣言0件・呼び出しブロック0件(FFI は手順5)。`Cargo.lock` とビルド環境は手順1のコミットに含めた。別セッションの差分レビューは未実施。
+
+## 手順2の実施記録(2026-10-31)
+
+- **手順2完了**: `tests/math/eigen_order_probe.cpp` と 3.2 の実測結果・再実行手順を手順2のコミットに含めた。B のビルドとゴールデン出力は変えていない。
+- 記録先: `/tmp/pointlio-rust-step12-20261031/eigen-order.log` と同ディレクトリの実測バイナリ。検証時のソースの SHA256、コンパイラ・Eigen の版、コンパイルコマンド、全件数・不一致数をログに記録した。
+- 別セッションの差分レビューは未実施。次は手順3(入出力と Red)。
