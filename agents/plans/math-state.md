@@ -136,6 +136,10 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 - 行列の持ち方は `[[f64; 3]; 3]` の行優先(`m[r][c]`)。Eigen は列優先だが、この範囲では配列として受け渡さないので、演算の順だけを合わせる。PLGOLD01 は行優先なので、読み書きは添字の対応だけで済む。
 - 範囲外の分岐(`kf_input`、S2)は型に入れない。
 
+### 3.5 公開 API
+
+手順4の前に [公開 API 案](math-state-api.md)を提示し、2026-10-31 に人の承認を得た。配列の型エイリアス、`StateOutput` の全フィールド、C++ に対応する更新メソッドと関数を公開し、内部の行列演算は公開しない。数値の本体は手順5で実装する。
+
 ## 4. テスト影響範囲
 
 - C++(B)のソース、ゴールデン出力、登録済みの (a, r)、照合器は変えない。
@@ -268,3 +272,35 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 - `env -i PATH=/usr/bin:/bin /bin/bash --noprofile --norc` で `rg` が見つからないことを確認し、代替コマンドなしで再実行した。NaN は終了コード2、零は終了コード1・13部品すべて FAIL。照合ログと `comparison-exit.txt` を確認し、単なる非零終了を Red と扱っていない。
 - 両出力の13ファイル・1205記録をバイト単位で再確認した。入力とヘッダは B と一致し、出力は全て指定どおりの NaN または正の零だった。ソースの SHA256 一覧は対象10ファイルを重複なく含み、未追跡の新規 Rust ファイルも列挙された。
 - 再実行の保存先: `/tmp/pointlio-rust-step3-no-rg-nan`、`/tmp/pointlio-rust-step3-no-rg-zero`。今回の修正はホスト側スクリプトと記録のみで、Rust のコード・テスト・照合器・許容誤差・ゴールデン出力は変更していない。`bash -n` と差分の空白検査も通過した。
+
+## 手順4の実施記録(2026-10-31)
+
+- **手順4完了**: 公開 API を事前提示して承認を得た後、`linalg` の4型、`so3`・`state`・`process`・`esekf` の型・シグネチャと `todo!` の未実装スタブを追加した。数学の本実装・libm FFI はまだ書いていない。
+- `tests/math_l1.rs` に C++ の範囲内14件を移した。対応は下表のとおり。全ケースで固定シードを使い、完了件数も検査する。数値微分の列数も検査する。許容誤差は C++ と同じ。
+
+| C++ のテスト | Rust (`tests/math_l1.rs`) | 実装後に完了を要求する件数 |
+| --- | --- | --- |
+| `So3Exp.MatchesAxisAngle` | `so3_exp_matches_axis_angle` | 120 |
+| `So3Exp.BelowThresholdReturnsIdentityWithinAngle` | `so3_exp_below_threshold_returns_identity_within_angle` | 20 |
+| `So3Exp.IsRotation` | `so3_exp_is_rotation` | 200 |
+| `So3Log.InvertsExp` | `so3_log_inverts_exp` | 200 |
+| `So3Log.SmallAngleBranchErrorBound` | `so3_log_small_angle_branch_error_bound` | 100 |
+| `So3Log.FiniteNearPi` | `so3_log_finite_near_pi` | 80 |
+| `So3Log.AccurateAroundNearPiBranch` | `so3_log_accurate_around_near_pi_branch` | 160 |
+| `So3Boxplus.IsRightPerturbation` | `so3_boxplus_is_right_perturbation` | 50 |
+| `So3Boxminus.InvertsBoxplus` | `so3_boxminus_inverts_boxplus` | 100 |
+| `StateBoxminus.InvertsBoxplusForAllComponents` | `state_boxminus_inverts_boxplus_for_all_components` | 50 |
+| `AMatrix.IsLeftJacobianOfExp` | `a_matrix_is_left_jacobian_of_exp` | 50 (微分150列) |
+| `ProcessModel.JacobianMatchesNumeric` | `process_model_jacobian_matches_numeric` | 20 (微分600列) |
+| `Predict.CovarianceMatchesNumericJacobian` | `predict_covariance_matches_numeric_jacobian` | 20 (微分600列) |
+| `Predict.CovarianceStaysSymmetricPositive` | `predict_covariance_stays_symmetric_positive` | 20 |
+
+- Red: `rust/run.sh test --release --locked --offline --no-run` で全ターゲットがコンパイルできた。`rust/run.sh test --release --locked --offline --test math_l1 -- --test-threads=1` は終了コード101、0件通過・14件失敗・0件無視。14件すべての名前と `not yet implemented` の14件のパニックをログで確認した。コンパイル失敗や別の参照計算の失敗を Red と取り違えていない。
+- 各テストは最初の未実装関数で止まるため、表の全ケースの数値判定・完了件数が実行されたとは扱わない。数値アサーションの検出力、全ケースでの通過、BL-008 の修正を戻した版での失敗は手順5以降に確認する。
+- `tests/support/mod.rs` に、別の Rodrigues、クォータニオン経由の Log、配列での行列演算、対称行列の Jacobi 法を独立に書いた。数値微分の摂動・差・状態伝播は、C++ とプランどおり実装側の状態メソッドと `f_output` を使う。
+- L1 の乱数は SplitMix64 と Box-Muller を使い、シードは元の各 C++ テストと同じ番号で固定する。C++ の `mt19937_64` と同じ列ではない(承認済みプランの方針)。
+- 参照の検証 `tests/reference_math.rs` の3件が通過。既知の軸回転、既知の固有値を持つ零・対角・ブロック・密な30次元行列、NaN/Inf を見逃さない検査を確認した。Jacobi の内部停止基準は機械イプシロンと対角の尺度、上限100 sweep。未収束は失敗させる。これは参照ソルバの内部条件で、L1 の許容誤差を追加・変更したものではない。
+- 既存の入出力テスト6件が通過。`rust/run.sh clippy --release --locked --offline --all-targets -- -D warnings` と fmt の検査も通過。C++ の入力角 `3.14` を PI に変えないための `approx_constant`、Jacobi の対称な行・列の更新を添字で記述するための `needless_range_loop` だけを該当関数で許可し、全体の警告検査は維持した。
+- 記録先: `/tmp/pointlio-rust-step4-20261031/`。コンパイル、L1 Red と終了コード、入出力・参照、clippy のログ。`/tmp` は永続保管先ではない。イメージは手順1と同じ `point-lio-rust` を使い、ホストでは数値を動かしていない。
+- 手順1〜3と前提となる計画・承認記録を含む `5d033fd` までを、`origin/docs/rust-verification-plan` にプッシュした(2026-10-31)。API と手順4の変更は手順4の独立したコミットに含めた(未プッシュ)。別セッションの差分レビューは未実施。
+- `unsafe` は引き続き0件。C++、ゴールデン出力、照合器、許容誤差、`Cargo.lock`、手順3の仮出力バイナリは変更していない。次は手順5の実装。L1・L2 の通過、libm の検査、debug/release の出力一致は未確認。
