@@ -1,0 +1,25 @@
+# Build with build_rust_image.sh, which verifies the local base image ID.
+# rustup-init checksum source (verified 2026-10-31):
+# https://static.rust-lang.org/rustup/archive/1.29.1/x86_64-unknown-linux-gnu/rustup-init.sha256
+FROM point-lio-noetic:pinned
+
+LABEL org.pointlio.base-image="sha256:4ffccd043d071a088d7b09e80eb78cbef3b61d777e2b4f146768bac3def2dead" \
+      org.pointlio.rust-toolchain="1.99.0"
+
+ENV RUSTUP_HOME=/opt/rustup \
+    CARGO_HOME=/opt/cargo \
+    PATH=/opt/cargo/bin:${PATH}
+
+RUN test "$(dpkg --print-architecture)" = amd64 \
+    && curl --fail --location --proto '=https' --tlsv1.2 \
+      https://static.rust-lang.org/rustup/archive/1.29.1/x86_64-unknown-linux-gnu/rustup-init \
+      -o /tmp/rustup-init \
+    && echo 'dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71  /tmp/rustup-init' | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y --no-modify-path --profile minimal \
+      --default-toolchain 1.99.0 --component rustfmt --component clippy \
+    && rm /tmp/rustup-init \
+    && rustc -vV \
+    && rustup component list --installed
+
+WORKDIR /ws/src/point_lio/rust

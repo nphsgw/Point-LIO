@@ -149,7 +149,7 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 
 ## 6. 実装順
 
-1. **ビルド環境**: `docker/Dockerfile.rust`・`docker/build_rust_image.sh`、`rust/` のワークスペースと空の crate、`rust/run.sh`。`--network none` で `cargo build --release --locked --offline` が通り、`rustc -vV` が 1.99.0 であることを確かめる。`curl` は土台に導入済み(`7.68.0-1ubuntu2.25`、2026-10-31 に確認)で、追加の apt インストールは不要。要確認: rustup-init 1.29.1 の SHA256。
+1. **ビルド環境**: `docker/Dockerfile.rust`・`docker/build_rust_image.sh`、`rust/` のワークスペースと空の crate、`rust/run.sh`。`--network none` で `cargo build --release --locked --offline` が通り、`rustc -vV` が 1.99.0 であることを確かめる。`curl` は土台に導入済み(`7.68.0-1ubuntu2.25`、2026-10-31 に確認)で、追加の apt インストールは不要。rustup-init 1.29.1 の SHA256 は実ファイルと公式のチェックサムの一致を確認済み(末尾の「手順1の実施記録」)。
 2. **Eigen の演算順の実測**: `tests/math/eigen_order_probe.cpp` で 3.2 の要確認の式を実測し、表を 3.2 に追記する。実測は固定イメージで、B と同じフラグ(`-O3`、`-march` なし)で行う。B の実際の関数に inline された形で順が変わらないことは、手順5のビット一致で確かめる。
 3. **PLGOLD01 の読み書きと Red**: `golden.rs`、`bin/math_golden.rs`、`run_math_golden.sh`。全部品を仮の実装(NaN、0)にして、照合器が終了コード2・1を返すことを確かめる。
 4. **L1 テストを先に書く**(5 節)。実装前に失敗することを確かめる。
@@ -193,7 +193,7 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 
 - 人の判断: `point-lio-rust` の派生イメージ、自前の固定長行列型、glibc `sincos` の FFI を承認。プラン全体の承認とは区別する。
 - このセッションでの点検: L1 の14件の対応を明記、実測した libc6 の版を訂正、curl の導入済みを確認、単独の cos を必須シンボルから除外、unsafe の宣言と呼び出しブロックを分けて記録するよう明記した。
-- プラン全体の別セッションレビュー、rustup-init の SHA256、Eigen の残りの演算順、Rust 実装の検証は未完了。
+- プラン全体の別セッションレビュー、rustup-init の SHA256、Eigen の残りの演算順、Rust 実装の検証は未完了。これは承認前の時点の記録。SHA256 の確認は、後述の「手順1の実施記録」で完了した。Eigen の演算順の確認は手順2で行う。
 
 ## 別セッションのレビューの反映(2026-10-31)
 
@@ -205,3 +205,14 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 - 2回目の別セッションのレビュー(`54b3753` が対象。判定は「修正すれば承認してよい」)の指摘を反映した: 逆アセンブルの検査を、命令の個数ではなく呼び出し先をたどる形にし、対応づけられない呼び出しが残る間は未完了とした。`black_box` は片方の引数に通す形に決めた。`normalized` の零の分岐に到達しない理由の下界を tr(S) > 2 − 5e-8 に訂正した(結論は変わらない)。
 - 3点の人の承認を、計画書の決定事項(2026-10-31)の7〜9に記録した。sincos FFI は書き直した理由で再承認した。
 - 既存スクリプトを実行: `bash tests/math/run_math_tests.sh` は全16件通過、`bash tests/math/run_math_golden.sh check` は全13部品通過。どちらも終了コード0。latest と pinned は同じ ID `sha256:4ffccd043d071a088d7b09e80eb78cbef3b61d777e2b4f146768bac3def2dead` だった。livox のビルド失敗は再現しなかったため、今回は台帳に起票しない。別の失敗ログがある場合は、その実行条件との差を調べる。ログ: `/tmp/pointlio-plan-l1-20261031.log`、`/tmp/pointlio-plan-golden-20261031.log`。
+
+## 手順1の実施記録(2026-10-31)
+
+- **手順1完了**: `docker/Dockerfile.rust`、`docker/build_rust_image.sh`、`rust/` のワークスペース、空の `pointlio-math` crate、`rust/run.sh`、コンテナで生成した `Cargo.lock` を追加した。数学の実装・L1 テスト・ゴールデン出力の読み書きは未着手。
+- rustup-init: [公式チェックサム](https://static.rust-lang.org/rustup/archive/1.29.1/x86_64-unknown-linux-gnu/rustup-init.sha256)とダウンロードした x86_64-unknown-linux-gnu 用の実ファイルが一致。SHA256 は `dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71`。Dockerfile も同じ値で照合してから実行する。
+- 土台の ID: `sha256:4ffccd043d071a088d7b09e80eb78cbef3b61d777e2b4f146768bac3def2dead`。作成した `point-lio-rust` の ID: `sha256:1aec8ce20e45bf85982dc8fd4cbd90e45ee8c58f65d61b6a07f5b6813d79ddb5`。土台・派生とも `docker/check_packages.sh` を通過し、OS パッケージと livox は固定版のまま。
+- `rustc -vV`: rustc 1.99.0 (`b940084d7eb6a299eb4bfeb8e34901bc051e7ac4`, 2026-09-28)、host `x86_64-unknown-linux-gnu`、LLVM 23.1.1。cargo 1.99.0 (`5f94df478`, 2026-08-27)。rustfmt・clippy の導入を確認した。
+- CPU: AMD Ryzen 7 7700X 8-Core Processor。libc6 は `2.31-0ubuntu9.18`。
+- `rust/run.sh build --release --locked --offline` が、`--network none`、リポジトリの読み取り専用 mount、ホストと同じ UID/GID、コンテナ内の `CARGO_TARGET_DIR` で通過。`fmt --all -- --check` と `clippy --release --locked --offline -- -D warnings` も通過。これらは空の crate とビルド環境の検証であり、数学の L1・L2 を通過したとは扱わない。
+- 記録先: `/tmp/pointlio-rust-step12-20261031`。イメージのビルドログ、環境情報、公式チェックサムと実ファイルを置いた。`/tmp` は永続保管先ではない。
+- `unsafe`: 現時点で宣言0件・呼び出しブロック0件(FFI は手順5)。`Cargo.lock` とビルド環境は手順1のコミットに含めた。別セッションの差分レビューは未実施。
