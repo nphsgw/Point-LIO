@@ -141,13 +141,13 @@ B 全体の完成は移植の前提にしない。範囲ごとに上の5つを�
 
 完了条件: §6 の条件4(A について)。条件1(状態の定義の文書)。§5 のトレースの完了条件3つ。ハーネスの判定(T1〜T14)についての条件5。
 
-**進捗(2026-10-30 更新)**
+**進捗(2026-10-31 更新)**
 
 | 項目 | 状態 |
 |---|---|
 | 1. 評価データ | 開発用の2本は完了([evaluation-data.md](evaluation-data.md))。最終評価用は maths-hard と Flatwall を選び、封印の規則を記録した(2026-10-26)。どちらも取得済み(maths-hard は 2026-10-30) |
 | 2. 実行ハーネス | 実装と T1〜T14 まで完了(2026-10-26)。`pointlio_offline` の出力は、改造前の ROS 経路とビット一致した。差分の別セッションでのレビューが残る([ros-free-harness.md](../agents/plans/ros-free-harness.md) §10) |
-| 3. 事前登録 | 承認済み([metrics-preregistration.md](metrics-preregistration.md))。2026-10-26 に2回改訂。2回目で B→C の判定を J1〜J6 に組み替え、スレッド数を `OMP_NUM_THREADS` の記録に改めた(別レビュー3回、[改訂案](metrics-preregistration-revision-proposal.md))。付録(範囲ごとの基準)は未登録 |
+| 3. 事前登録 | 承認済み([metrics-preregistration.md](metrics-preregistration.md))。2026-10-26 に2回改訂。2回目で B→C の判定を J1〜J6 に組み替え、スレッド数を `OMP_NUM_THREADS` の記録に改めた(別レビュー3回、[改訂案](metrics-preregistration-revision-proposal.md))。付録(範囲ごとの基準)には、数学と状態の表現の範囲の基準を登録した(2026-10-31、`efc461e`。根拠は [math-tolerance-proposal.md](math-tolerance-proposal.md))。他の範囲は未登録 |
 | 4. A のベースライン | 精度と感度分析を実施(2026-10-26、[a-baseline.md](a-baseline.md))。V0〜V4 とも変種の中でビット一致。τ(ATE)は avia 1.0e-01 m、ouster 8.7e-03 m。ouster の正解に対する ATE は 0.0694〜0.0704 m。性能の計測と RPE 1 s は未実施 |
 | 5. 再現性と判定の道具 | 実施(2026-10-26)。タグ `A-v1`、Dockerfile の固定と `docker/packages.lock`・`docker/check_packages.sh`、メタデータの拡張、`tests/harness/venv.lock`、T7・T8 の修正と注入による確認、台帳。固定した Dockerfile で作り直したイメージ(`point-lio-noetic:pinned`、全パッケージが lock と一致)で、各 bag 1回ずつ T7・T8・T10・T12・T14 が通過し、姿勢・点群とも基準とビット一致した(2026-10-26。記録は `~/data/slamrun-runs/pinned`)。これは未コミットの作業ツリー(`git_dirty=12`、差分は各出力の `git_diff.patch`。C++ のソースは `A-v1` と同じ)での実行で、コミット後の `c8b197a`・`git_dirty=0` でも同じく全項目が通過し、ビット一致した(記録は `~/data/slamrun-runs/clean-c8b197a`) |
 | 6. トレース・状態の定義・入力生成器・性能・サニタイザ | 状態の定義の文書は別セッションのレビューを反映した([state-definition.md](state-definition.md))。トレースの仕様は草案 v1([trace-format.md](trace-format.md)、v1 のレビューは未実施、実装なし)。入力生成器と性能は未着手。サニタイザはビルドの成立のみ確認済みで、実行は未検証 |
@@ -250,10 +250,22 @@ B 全体の完成は移植の前提にしない。範囲ごとに上の5つを�
 2. 数学と状態の表現の範囲の L2 は、ゴールデン出力(`golden/math`)との照合とする。この範囲は段階を持たない部品の集まりなので、トレースは前処理から後の範囲で使う
 3. Rust の実装はリポジトリ内の `rust/` に置く。ツールチェーンは 1.99.0 を `rust-toolchain.toml` で固定し、`Cargo.lock` をコミットする。ビルドと実行は C++ と同じ Docker イメージを土台にする(`f64` の三角関数などは glibc の libm を呼ぶので、ホストで動かすと B→C の差に libm の版の違いが混ざる)
 
+## 決定事項(2026-10-31、人の判断)
+
+1. 数学と状態の表現の範囲の (a, r) を承認し、付録に登録する(`efc461e`)
+2. この範囲の判定の注入による確認で、「f32 での計算」を「各部品の出力を f32 に丸める」で代える。中間の計算での累積と分岐の変化は確かめたと扱わない
+3. 照合器は、比べられる側の NaN/Inf を不正なデータ(終了コード2)として扱い、比較を止める
+4. この範囲では、回転を付録どおり回転行列の成分ごとに比べる(J4 本文の boxminus での比較の、この範囲での具体的な形として扱う)
+5. 注入による確認は、道具をコミットした版(`0ed3d08`)で再実行し、その記録を正とする
+6. リモート origin を `https://github.com/nphsgw/Point-LIO.git` に変える
+7. C(数学と状態の表現)のビルドと実行は、`point-lio-noetic:pinned` から派生したイメージ `point-lio-rust` で行う。元のイメージは作り直さない(2026-10-30 の決定3の「同じイメージを土台にする」の具体的な形。[プラン](../agents/plans/math-state.md) 3.1)
+8. C の行列は nalgebra を使わず、自前の固定長の型で Eigen 3.3.7 の和の順を再現する([プラン](../agents/plans/math-state.md) 3.2)
+9. B が `sincos` を呼ぶ箇所で、C も glibc の `sincos` を FFI で呼ぶ。最初の承認の理由の一部(「Rust は sin・cos を別々に呼ぶ」)は誤りだった(LLVM は opt-level 3 で sincos にまとめ、0 ではまとめない)。書き直した理由(どのビルドでも B と同じ関数を呼ぶため。[プラン](../agents/plans/math-state.md) 3.3)で再承認した。`f64` のまま LLVM のまとめに頼る案は採らない
+
 ## 次の作業
 
 1. 状態の定義の文書([state-definition.md](state-definition.md))のレビューと、トレースの仕様(§5)
-2. 数学と状態の表現の L1 テストとゴールデン出力(完了)。付録への (a, r) の登録と、その判定の注入による確認
+2. 数学と状態の表現: L1 テストとゴールデン出力、付録への (a, r) の登録、その判定の注入による確認まで完了(2026-10-31。[math-injection-validation.md](math-injection-validation.md))。§6 の条件5を満たした。次は C(`rust/`)のプラン([ひな形](../agents/plans/template.md))と、CLAUDE.md の「Rust ビルド・テスト」の記入。f32 の中間計算での累積と分岐の変化は未確認
 3. 性能の計測の仕組み(フェーズ0の項目6)。A の性能を測る
 4. 最終評価用のデータ: maths-hard の取得と封印(2026-10-30 に完了。[evaluation-data.md](evaluation-data.md))
 5. 台帳: BL-002・BL-006 の再現の試み、BL-001・BL-007・BL-008・BL-009・BL-010 の B での修正
