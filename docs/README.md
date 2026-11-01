@@ -182,6 +182,7 @@ flowchart TD
 | [ros-free-harness.md](../agents/plans/ros-free-harness.md) | プラン | `pointlio_offline` とハーネスのテスト T1〜T14 |
 | [math-state.md](../agents/plans/math-state.md) | プラン | C の最初の範囲の設計と手順1〜8の記録 |
 | [math-state-api.md](../agents/plans/math-state-api.md) | プラン | 上の範囲の Rust の公開 API |
+| [trace-b.md](../agents/plans/trace-b.md) | プラン | トレースの B への実装と、仕様 §8 の完了条件の確かめ |
 | [template.md](../agents/plans/template.md) | ひな形 | 新しいプランを作るとき |
 | [a-baseline.md](a-baseline.md) | 記録 | A の演算順の変種 V0〜V4 の幅と精度 |
 | [fp-order-sensitivity.md](fp-order-sensitivity.md) | 記録 | ビルドフラグだけで軌跡がずれること(判定を J1〜J6 に変えた理由) |
