@@ -1,8 +1,9 @@
-//! Math and state representation port. Numerical implementation starts in plan step 5.
+//! Math and state representation port of the B implementation.
 #![deny(unsafe_code)]
 
 pub mod esekf;
 pub mod golden;
+mod libm;
 pub mod linalg;
 pub mod process;
 pub mod so3;

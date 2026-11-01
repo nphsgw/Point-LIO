@@ -1,4 +1,4 @@
-//! The 14 in-scope tests from tests/math/math_tests.cpp, with unchanged limits.
+//! The 14 original in-scope tests and BL-011 regression, with unchanged limits.
 //! Every test also checks its completed case count (once implementations exist).
 mod support;
 
@@ -77,6 +77,21 @@ fn so3_log_inverts_exp() {
         count += 1;
     }
     assert_eq!(count, 200);
+}
+
+// C++ So3Log.InvertsRoundedRotationBL011: fixed input bits from the B regression.
+#[test]
+fn so3_log_inverts_rounded_rotation_bl011() {
+    let v = [0xc0052889165ec0c2, 0x3fe97bf35e541585, 0xbff75a8559c5151b].map(f64::from_bits);
+    let bits = [
+        [0x3fdbbe5539650384, 0xbfdb18dce9eb1e75, 0x3fe974c0a7d7e313],
+        [0xbfdc25aeb5f0ee9f, 0xbfebd61caea14362, 0xbfcc95d7b3ad77e5],
+        [0x3fe92b6a9e24735f, 0xbfd0320598cac0f6, 0xbfe206874f7eb430],
+    ];
+    let r = bits.map(|row| row.map(f64::from_bits));
+    let actual = so3::log(&r);
+    assert!(actual.iter().all(|x| x.is_finite()));
+    assert!(norm(&vector_difference(&actual, &v)) <= 1e-12);
 }
 
 // C++ So3Log.SmallAngleBranchErrorBound
