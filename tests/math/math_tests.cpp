@@ -10,6 +10,7 @@
 #include <random>
 
 #include "Estimator.h"
+#include "point_order.h"
 
 namespace {
 
@@ -392,6 +393,138 @@ TEST(IVoxClosest, NoCandidateClearsOutput)
     EXPECT_TRUE(ivox.GetClosestPoint(far, out, 5));
     ASSERT_EQ(out.size(), 1u);
     EXPECT_EQ(out[0].x, far.x);
+}
+
+
+// --- 点の並び ---
+
+// 時刻の等しい点が多い点群。x に元の添字を入れる
+PointCloudXYZI cloud_with_time_ties(int n, int groups, std::uint64_t seed)
+{
+    std::mt19937_64 rng(seed);
+    std::uniform_int_distribution<int> group(0, groups - 1);
+    PointCloudXYZI cloud;
+    for (int i = 0; i < n; ++i)
+    {
+        PointType p;
+        p.x = static_cast<float>(i);
+        p.y = 0;
+        p.z = 0;
+        p.curvature = static_cast<float>(group(rng));
+        cloud.push_back(p);
+    }
+    return cloud;
+}
+
+// 台帳 BL-007: A の非安定なソートでは、時刻の等しい点の並びがソートの実装で決まる
+TEST(PointOrder, TimeSortKeepsInputOrderOfTies)
+{
+    int checked = 0;
+    for (std::uint64_t seed = 1; seed <= 20; ++seed)
+    {
+        PointCloudXYZI cloud = cloud_with_time_ties(200, 5, seed);
+        sort_by_time(cloud);
+        ASSERT_EQ(cloud.size(), 200u);
+        for (size_t i = 1; i < cloud.size(); ++i)
+        {
+            const PointType &a = cloud.points[i - 1], &b = cloud.points[i];
+            ASSERT_LE(a.curvature, b.curvature) << seed << " " << i;
+            if (a.curvature == b.curvature)
+            {
+                EXPECT_LT(a.x, b.x) << seed << " " << i;
+                ++checked;
+            }
+        }
+    }
+    EXPECT_EQ(checked, 20 * (200 - 5));
+}
+
+// ボクセル内の点の値の大きさを散らし、足す順で float の和が変わるようにする
+PointCloudXYZI cloud_in_few_voxels(int n, std::uint64_t seed)
+{
+    std::mt19937_64 rng(seed);
+    std::uniform_int_distribution<int> voxel(0, 3);
+    std::uniform_real_distribution<float> frac(0.0f, 0.999f), mag(-3.0f, 3.0f);
+    PointCloudXYZI cloud;
+    for (int i = 0; i < n; ++i)
+    {
+        PointType p;
+        p.x = static_cast<float>(voxel(rng)) + frac(rng);
+        p.y = frac(rng);
+        p.z = frac(rng);
+        p.intensity = std::pow(10.0f, mag(rng));
+        p.curvature = std::pow(10.0f, mag(rng));
+        p.normal_x = std::pow(10.0f, mag(rng));
+        p.normal_y = 0;
+        p.normal_z = 0;
+        cloud.push_back(p);
+    }
+    return cloud;
+}
+
+void expect_same_bits(const PointType &a, const PointType &b, int voxel)
+{
+    const float fa[] = {a.x, a.y, a.z, a.intensity, a.curvature, a.normal_x, a.normal_y, a.normal_z};
+    const float fb[] = {b.x, b.y, b.z, b.intensity, b.curvature, b.normal_x, b.normal_y, b.normal_z};
+    EXPECT_EQ(std::memcmp(fa, fb, sizeof fa), 0) << "voxel " << voxel;
+}
+
+// 台帳 BL-007: A はボクセル内の点を非安定なソートで並べ、その順に float で足す
+TEST(PointOrder, VoxelCentroidSumsInInputOrder)
+{
+    int checked = 0;
+    for (std::uint64_t seed = 1; seed <= 20; ++seed)
+    {
+        PointCloudXYZI::Ptr cloud(new PointCloudXYZI(cloud_in_few_voxels(400, seed)));
+        StableVoxelGrid<PointType> filter;
+        filter.setLeafSize(1.0f, 1.0f, 1.0f);
+        filter.setInputCloud(cloud);
+        PointCloudXYZI out;
+        filter.filter(out);
+
+        // 期待値: 入力の順に同じ累積器で足す。出力はボクセルの添字の昇順(x の整数部の昇順)
+        std::vector<pcl::CentroidPoint<PointType>> sums(4);
+        for (const PointType &p : cloud->points)
+            sums[static_cast<int>(std::floor(p.x))].add(p);
+        ASSERT_EQ(out.size(), 4u) << seed;
+        for (int v = 0; v < 4; ++v)
+        {
+            PointType expected;
+            sums[v].get(expected);
+            expect_same_bits(out.points[v], expected, v);
+            ++checked;
+        }
+    }
+    EXPECT_EQ(checked, 20 * 4);
+}
+
+// 並びの修正のほかは pcl::VoxelGrid と同じ: ボクセルの数と順、重心(足す順の違いの丸めだけ)
+TEST(PointOrder, VoxelGridMatchesPclExceptOrder)
+{
+    int checked = 0;
+    for (std::uint64_t seed = 1; seed <= 20; ++seed)
+    {
+        PointCloudXYZI::Ptr cloud(new PointCloudXYZI(cloud_in_few_voxels(400, seed)));
+        PointCloudXYZI a, b;
+        pcl::VoxelGrid<PointType> pcl_filter;
+        pcl_filter.setLeafSize(1.0f, 1.0f, 1.0f);
+        pcl_filter.setInputCloud(cloud);
+        pcl_filter.filter(a);
+        StableVoxelGrid<PointType> filter;
+        filter.setLeafSize(1.0f, 1.0f, 1.0f);
+        filter.setInputCloud(cloud);
+        filter.filter(b);
+        ASSERT_EQ(a.size(), b.size()) << seed;
+        for (size_t v = 0; v < a.size(); ++v)
+        {
+            const float fa[] = {a[v].x, a[v].y, a[v].z, a[v].intensity, a[v].curvature, a[v].normal_x};
+            const float fb[] = {b[v].x, b[v].y, b[v].z, b[v].intensity, b[v].curvature, b[v].normal_x};
+            for (int k = 0; k < 6; ++k)
+                EXPECT_NEAR(fa[k], fb[k], 1e-5f * std::max(1.0f, std::fabs(fa[k]))) << seed << " " << v << " " << k;
+            ++checked;
+        }
+    }
+    EXPECT_EQ(checked, 20 * 4);
 }
 
 }  // namespace

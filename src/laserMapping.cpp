@@ -11,6 +11,7 @@
 #include <tf/transform_broadcaster.h>
 #include "li_initialization.h"
 #include "mapping_core.h"
+#include "point_order.h"
 #include <malloc.h>
 // #include <cv_bridge/cv_bridge.h>
 // #include "matplotlibcpp.h"
@@ -38,7 +39,7 @@ PointCloudXYZI::Ptr feats_undistort(new PointCloudXYZI());
 PointCloudXYZI::Ptr feats_down_body_space(new PointCloudXYZI());
 PointCloudXYZI::Ptr init_feats_world(new PointCloudXYZI());
 std::deque<PointCloudXYZI::Ptr> depth_feats_world;
-pcl::VoxelGrid<PointType> downSizeFilterSurf;
+StableVoxelGrid<PointType> downSizeFilterSurf;  // BL-007
 pcl::VoxelGrid<PointType> downSizeFilterMap;
 
 V3D euler_cur;
@@ -450,12 +451,12 @@ void process_measures(MappingOutput &out)
             {
                 downSizeFilterSurf.setInputCloud(feats_undistort);
                 downSizeFilterSurf.filter(*feats_down_body);
-                sort(feats_down_body->points.begin(), feats_down_body->points.end(), time_list); 
+                sort_by_time(*feats_down_body);  // BL-007
             }
             else
             {
                 feats_down_body = Measures.lidar;
-                sort(feats_down_body->points.begin(), feats_down_body->points.end(), time_list); 
+                sort_by_time(*feats_down_body);  // BL-007
             }
             {
                 time_seq = time_compressing<int>(feats_down_body);
