@@ -93,7 +93,7 @@
 
 一覧だけを置く。中身は各リンク先にある。
 
-- トレースの仕様の最新版の別セッションレビュー([trace-format.md](trace-format.md))
+- トレースの仕様 v6 の承認([trace-format.md](trace-format.md)。v6 の差分のレビューの指摘の反映は、別セッションのレビューをしていない)
 - 前処理の (a, r) の登録
 - 台帳の仮説の分類と決定([bug-ledger.md](bug-ledger.md))
 - [2026-11-01 のゲート](gates/2026-11-01-phase0-exit-phase1-cutoff.md)の5節で未判定のもの
