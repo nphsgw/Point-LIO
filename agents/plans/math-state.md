@@ -196,9 +196,11 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 | --- | --- | --- | --- |
 | 単体テスト(L1) | リポジトリ直下(Docker) | `rust/run.sh test --release --locked --offline` | `point-lio-rust`(手順1で作る) |
 | ゴールデン出力との比較 | リポジトリ直下(Docker、照合はホストの `python3`) | `rust/run_math_golden.sh <新しい出力ディレクトリ>`(中で `compare_math_golden.py golden/math <出力>` を呼ぶ) | `golden/math/SHA256SUMS` の一致、`point-lio-rust` |
-| 性質テスト | リポジトリ直下(Docker) | 単体テストに含む。debug/release の一致、`nm -D`、関数ごとの逆アセンブルは `run_math_golden.sh` に含める | 同上 |
+| 性質テスト | リポジトリ直下(Docker) | 回転・共分散などの性質は上の単体テストに含む | `point-lio-rust` |
+| 手順6の検査 | リポジトリ直下(Docker、保存した ELF の読解はホスト) | `bash rust/check_math_step6.sh <リポジトリ外の新しい出力先>`。debug/release のバイト比較、動的シンボル・逆アセンブルの採取、比較版の検査。終了0だけでは関数ごとの逆アセンブルの確認を通過とみなさない | `point-lio-rust`、`golden/math/SHA256SUMS` の一致、ホストの `python3` と Rust v0 の名前を復元できる binutils (2.42 で確認) |
 | 照合器の契約テスト(変えていないことの確認) | リポジトリ直下 | `python3 -B tests/math/test_compare_math_golden.py` | — |
-| 静的検査 | リポジトリ直下(Docker) | `rust/run.sh clippy --release --locked --offline -- -D warnings` | 同上 |
+| clippy | リポジトリ直下(Docker) | `rust/run.sh clippy --release --locked --offline --all-targets -- -D warnings` | `point-lio-rust` |
+| fmt | リポジトリ直下(Docker) | `rust/run.sh fmt --all -- --check` | `point-lio-rust` |
 
 完了時に実行結果と未検証の範囲を追記する。実行予定を、実行済みの結果として書かない。
 
@@ -363,3 +365,27 @@ Rust の `f64::sin`・`f64::cos` がどちらを呼ぶかは、ビルドで変�
 - unsafe は `libm.rs` の extern 宣言1件・呼び出しブロック1件、各3行、**2箇所・6行**。他の `.rs` に unsafe の実コードはない。FFI のメモリ安全レビューは未実施。
 - 記録先は `~/data/slamrun-runs/c-step6-30e5d51/rust`、B は同じディレクトリの `b-targets`・`b-full-build` (実行時の `/tmp` からコピーし、一致を確認済み)。手順1〜5と BL-011 の検証で記した `/tmp` の記録は、2026-11-01 の時点で残っていない。判定と根拠は各文書の記述だけが残る。比較版はこの記録先に隔離し、本体には適用していない。ゴールデン・照合器・許容誤差・数学の実装・既存テストは変更していない。
 - 手順7の確定と別セッションの差分・FFI レビューは未完了。θ=1e-3 の既知の制約も維持しており、モジュール全体を完了した C とはまだ扱わない。
+
+## 手順7の実施記録 (2026-11-01)
+
+- **手順7完了**。人が選んだ (a) に従い、AGENTS.md の前提条件欄には手順8の別セッションの差分・FFI レビュー未完了の注記を1行だけ残した。手順6のコマンドは実装済みの `check_math_step6.sh` に合わせ、`run_math_golden.sh` へ検査を組み込む変更はしていない。
+- 変更したのは AGENTS.md の概要表の `rust/` 行と主要コマンド表の「Rust ビルド・テスト」行、本プラン7節の検証表とこの実施記録だけ。`CLAUDE.md` は AGENTS.md への既存のシンボリックリンクなので同じ内容を参照する。
+- 概要表は現状とプランへのリンクに整理した。コマンド欄に clippy・fmt・手順6の検査・照合器の契約テストを加え、`POINTLIO_MATH_COMPONENT`・`POINTLIO_MATH_STUB` の説明もここへ移した。日付付きの進捗と手順7の未完了注記は外し、前提条件・制約と手順8の未完了注記を残した。「使わないもの」の欄は変更していない。
+- 本プラン7節は性質テストと手順6の採取・検査を分け、clippy を `--all-targets` 付きの実行コマンドに揃え、fmt の行を加えた。スクリプトの終了0だけでは関数ごとの逆アセンブルの確認を通過扱いにしないことを、両方の表に記載した。
+- 親コミット `01f1069` で編集前に確認し、上の行を書き直した後、新しい出力先で同じコマンドをもう一度、各々順に実行した。2回とも次の結果だった:
+
+| コマンド | 結果 (編集前・編集後とも同じ) |
+| --- | --- |
+| `docker/build_rust_image.sh` の土台IDの照合部分のみ | 終了0。土台 `sha256:4ffccd043d071a088d7b09e80eb78cbef3b61d777e2b4f146768bac3def2dead` と一致 |
+| `rust/run.sh build --release --locked --offline` | 終了0 |
+| `rust/run.sh test --release --locked --offline` | 終了0。L1 15件・入出力6件・参照計算3件通過、無視0件 |
+| `rust/run_math_golden.sh <新しい出力ディレクトリ>` | 終了0。実計算で全13部品・1,205記録通過 |
+| `rust/run.sh clippy --release --locked --offline --all-targets -- -D warnings` | 終了0。`run.sh` 経由で実行可能 |
+| `rust/run.sh fmt --all -- --check` | 終了0。`run.sh` 経由で実行可能 |
+| `bash rust/check_math_step6.sh <リポジトリ外の新しい出力先>` | 終了0。13ファイルの debug/release バイト一致と両方の照合を確認。BL-008 比較版は L1 の対応する2件が失敗 (終了101)、照合は NaN/Inf を検出 (終了2) |
+| `python3 -B tests/math/test_compare_math_golden.py` | 終了0。契約テスト8件通過 |
+
+- イメージ作成は人の指示どおり土台IDの確認までに限定した。元スクリプトの先頭から `check_packages.sh` 呼び出し直前までを抽出し、元のパスを `$0` に渡して実行した。パッケージ照合・イメージの再作成は今回実行していない。前後の `docker image inspect` で Rust イメージの ID は既存の `sha256:1aec8ce20e45bf85982dc8fd4cbd90e45ee8c58f65d61b6a07f5b6813d79ddb5` のままだった。
+- 各コマンドの引数・ログ・終了コードと出力は `/tmp/pointlio-step7-20261101/before`・`after` に記録した。具体的な照合出力先はそれぞれの `golden-output`、手順6は `step6-output`。`commands.json` に実際に渡した引数 (土台ID確認の抽出コマンドも含む) がある。`/tmp` は永続保管先ではない。
+- 今回はコマンドの再実行と記録の採取を確認した。手順6の全逆アセンブルの手動レビューを改めて実施したとは扱わず、手順6の判定根拠は既存の[検証記録](../../docs/math-step6-validation.md)を参照する。イメージの新規作成、実データでの C の評価、手順8の差分・FFI レビューは今回未実施。
+- `git diff --check` が通過。実装・スクリプト・テスト・ゴールデン・許容誤差は変更していない。手順8が残るため、モジュール全体を完了した C とは扱わない。手順7の文書だけを独立したコミットにし、プッシュはしない。
