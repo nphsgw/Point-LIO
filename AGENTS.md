@@ -25,7 +25,7 @@ C++14 / ROS1(catkin)/ Eigen3 / PCL 1.8 / OpenMP(任意)。READMEの動作確認�
 | tests/harness/ | 実行ハーネスのテスト(T1〜T14) |
 | docs/ | 計画・仕様 |
 | agents/ | 開発ルール・手順・移植ごとのプラン |
-| rust/ | Rust 実装(C)。Cargo のワークスペースで、範囲ごとに crate を置く。最初は数学と状態の表現の `rust/pointlio-math`(2026-10-31: 数学・状態・過程モデル・予測を実装。BL-011 の新Bへ合わせ、L1 全15件と L2 全13部品が通過。手順6以降と別セッションのレビューは未完了。[agents/plans/math-state.md](agents/plans/math-state.md)) |
+| rust/ | Rust 実装(C)。Cargo のワークスペースで、範囲ごとに crate を置く。最初は数学と状態の表現の `rust/pointlio-math`(2026-11-01: 数学・状態・過程モデル・予測を実装。BL-011 の新Bへ合わせ、L1 全15件と L2 全13部品が通過。手順6の検査も完了。手順7の確定と別セッションの差分・FFI レビューは未完了。[agents/plans/math-state.md](agents/plans/math-state.md)) |
 
 bag は `~/data/slamrun`、ハーネスの入力ファイルは `~/data/slamrun-input`、実行結果は `~/data/slamrun-runs`(いずれもリポジトリ外。[docs/evaluation-data.md](docs/evaluation-data.md))。ゴールデン出力は golden/(数学と状態の表現は golden/math)。
 
@@ -41,7 +41,7 @@ bag は `~/data/slamrun`、ハーネスの入力ファイルは `~/data/slamrun-
 | 数学の L1 テスト | リポジトリ直下(Docker) | `tests/math/run_math_tests.sh`(gtest の引数を渡せる。無効にしたテストは `--gtest_also_run_disabled_tests`) | Docker イメージ(libgtest-dev 入り) | — |
 | サニタイザ付きビルド(ASan+UBSan) | リポジトリ直下(Docker) | 上記ビルドの `catkin_make` を `catkin_make --cmake-args -DCATKIN_WHITELIST_PACKAGES="" -DCMAKE_CXX_FLAGS_DEBUG="-g -fsanitize=address,undefined -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"` に替える | 同上。ビルド成立のみ確認済みで、実行は未検証 | `CMAKE_CXX_FLAGS` への指定(CMakeLists.txt が `-O3` で上書きする)。MSan・TSan は未試行 |
 | ゴールデン出力の検証 | リポジトリ直下(Docker) | 数学と状態の表現: `tests/math/run_math_golden.sh check`(形式と出所は golden/math/README.md) | Docker イメージ。`golden/math/SHA256SUMS` の一致 | `write`(人の承認と専用コミットが要る) |
-| Rust ビルド・テスト | リポジトリ直下(Docker) | 初回のみ `docker/build_rust_image.sh`(土台 `point-lio-noetic:pinned` のイメージ ID を確かめてから、`docker/Dockerfile.rust` で `point-lio-rust` を作る)。ビルド `rust/run.sh build --release --locked --offline`。テスト `rust/run.sh test --release --locked --offline`(引数はそのまま `cargo` へ。`--network none`、成果物は `--rm` で消える)。ゴールデン出力との照合 `rust/run_math_golden.sh <新しい出力ディレクトリ>`(C の出力を作り、`tests/math/compare_math_golden.py` で比べる) | **2026-10-31: release で L1 全15件・入出力6件・参照計算3件・L2 全13部品が通過。手順6の debug/release 比較・libm の検査・BL-008 を戻す検査と、別セッションの差分・FFI レビューは未実施。照合の既定は実計算。単一部品は `POINTLIO_MATH_COMPONENT=<名前>` (部分照合と明記)。Red の再現には `POINTLIO_MATH_STUB=nan` (終了2)または `zero` (終了1)を指定。** Docker イメージ `point-lio-rust`(Rust 1.99.0 を `rust/rust-toolchain.toml` で固定。依存クレートなし) | ホストの `cargo`(ホストの glibc の libm が混ざり、B→C の差に libm の版の違いが入る)。`RUSTFLAGS`・`target-cpu` の指定(FMA が入り、B の V0 と演算が変わる) |
+| Rust ビルド・テスト | リポジトリ直下(Docker) | 初回のみ `docker/build_rust_image.sh`(土台 `point-lio-noetic:pinned` のイメージ ID を確かめてから、`docker/Dockerfile.rust` で `point-lio-rust` を作る)。ビルド `rust/run.sh build --release --locked --offline`。テスト `rust/run.sh test --release --locked --offline`(引数はそのまま `cargo` へ。`--network none`、成果物は `--rm` で消える)。ゴールデン出力との照合 `rust/run_math_golden.sh <新しい出力ディレクトリ>`(C の出力を作り、`tests/math/compare_math_golden.py` で比べる) | **2026-11-01: release で L1 全15件・入出力6件・参照計算3件・L2 全13部品が通過 (入出力・参照計算は10月31日の検証)。手順6で debug/release 全13ファイルのバイト一致、libm 呼び出し先、BL-008 を戻すと L1 2件と照合が落ちることを確認。手順7の確定と別セッションの差分・FFI レビューは未完了。再実行は `bash rust/check_math_step6.sh <新しいリポジトリ外の出力先>` ([記録](docs/math-step6-validation.md))。照合の既定は実計算。単一部品は `POINTLIO_MATH_COMPONENT=<名前>` (部分照合と明記)。Red の再現には `POINTLIO_MATH_STUB=nan` (終了2)または `zero` (終了1)を指定。** Docker イメージ `point-lio-rust`(Rust 1.99.0 を `rust/rust-toolchain.toml` で固定。依存クレートなし) | ホストの `cargo`(ホストの glibc の libm が混ざり、B→C の差に libm の版の違いが入る)。`RUSTFLAGS`・`target-cpu` の指定(FMA が入り、B の V0 と演算が変わる) |
 
 未記入のコマンドは推測して実行しない。必要な操作について確認する。
 
