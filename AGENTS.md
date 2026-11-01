@@ -2,7 +2,7 @@
 
 ## 概要
 
-Point-LIO(LiDAR-慣性オドメトリ。本リポジトリは grid-map 付きの fork)を Rust で再実装し、精度・性能・安全性がどれだけ変わるかを測る検証プロジェクト。全体計画は [docs/rust-reimplementation-verification-plan.md](docs/rust-reimplementation-verification-plan.md)。
+Point-LIO(LiDAR-慣性オドメトリ。本リポジトリは grid-map 付きの fork)を Rust で再実装し、精度・性能・安全性がどれだけ変わるかを測る検証プロジェクト。全体計画は [docs/rust-reimplementation-verification-plan.md](docs/rust-reimplementation-verification-plan.md)。進捗・次の作業・文書の関係は [docs/README.md](docs/README.md)(進捗の正本はここだけ)。
 
 比較は A→B、B→C、C→D で行う。A→B の差がバグ修正の効果、B→C の差が移植の効果(言語・数値ライブラリ・メモリ配置・探索順を含む。言語だけの効果とは言わない)、C→D の差が設計変更・最適化の効果。A→C を直接比べない。
 
@@ -73,5 +73,7 @@ bag は `~/data/slamrun`、ハーネスの入力ファイルは `~/data/slamrun-
 ## プランと作業の完了
 
 Rust への移植はモジュール単位で [agents/plans/template.md](agents/plans/template.md) をもとにプランを作る。小さな修正までプランを要求しない。
+
+範囲の条件・系統・フェーズの状態が変わる作業では、同じコミットで [docs/README.md](docs/README.md) の現在地を直す。計画書やプランに全体の進捗を書かない。
 
 変更内容、実行した検証と結果、未検証の範囲を報告する。実行していないテストや走らせていない実データでの確認を、通過扱いにしない。
