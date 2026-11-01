@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "changed_files", "red", "commands", "unverified", "questions", "ledger_candidates"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["done", "stopped"],
+      "description": "done: 4節の検証まで終えた。stopped: 止まる条件で止まった"
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "kind"],
+        "properties": {
+          "path": {"type": "string"},
+          "kind": {"type": "string", "enum": ["test", "impl", "other"]}
+        }
+      }
+    },
+    "red": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "exit_code", "failure"],
+      "properties": {
+        "command": {"type": "string"},
+        "exit_code": {"type": ["integer", "null"], "description": "実行できなかったときは null"},
+        "failure": {"type": "string", "description": "落ちたテストの名前と理由。実行できなかったときはその理由"}
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "exit_code", "summary"],
+        "properties": {
+          "command": {"type": "string"},
+          "exit_code": {"type": "integer"},
+          "summary": {"type": "string"}
+        }
+      }
+    },
+    "unverified": {"type": "array", "items": {"type": "string"}},
+    "questions": {"type": "array", "items": {"type": "string"}},
+    "ledger_candidates": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "作業中に気づいた、直していない不具合。ファイルと行、根拠を書く"
+    }
+  }
+}

@@ -196,6 +196,7 @@ flowchart TD
 | [gates/template.md](gates/template.md) | ひな形 | ゲートの記録を作るとき |
 | [gates/2026-11-01-phase0-exit-phase1-cutoff.md](gates/2026-11-01-phase0-exit-phase1-cutoff.md) | 記録(ゲート) | フェーズ0の終了とフェーズ1の打ち切りの判断材料 |
 | [agents/README.md](../agents/README.md)、[testing.md](../agents/rules/testing.md)、[rust-port.md](../agents/rules/rust-port.md) | ルール | 作業するときの規則(主にエージェント向け) |
+| [codex-handoff.md](../agents/codex-handoff.md)、[brief-template.md](../agents/handoff/brief-template.md) | ルール、ひな形 | Claude Code がプランとレビュー、Codex が実装を担当するときの手順と指示書(移植と B のバグ修正) |
 
 リポジトリ直下の README.md と Log/guide.md は上流(hku-mars/Point-LIO)のもので、このプロジェクトの文書ではない。
 
