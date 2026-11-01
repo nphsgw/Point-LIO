@@ -234,3 +234,11 @@ B(C++)の `pointlio_offline` に、仕様のトレース(`trace.bin`。完全と
 - 判定に使う B のコミット(記録の改造を入れた後。仕様 §8 の1)。タグを打つかは人の判断
 - 完了条件1〜3の結果(両 bag)、記録の量、手順8で数えた件数、手順0の T8 の基準の揺れ
 - 未検証の範囲(仕様 §9 の残り、退避の契約、OpenMP の並列の有無、BL-017 の結合の確認)
+
+## 手順0の実施記録(2026-11-01)
+
+Claude Code が実行した。改造の直前の B(`3747389`)を、変更のない worktree から実行した。イメージは `point-lio-noetic:pinned`(ID `sha256:4ffccd043d071a088d7b09e80eb78cbef3b61d777e2b4f146768bac3def2dead`。`:latest` も同じ ID)、`OMP_NUM_THREADS=1`、gcc 9.4.0、CPU は AMD Ryzen 7 7700X。各実行の `meta.txt` は `git_dirty=0`。
+
+- ファイル駆動: `~/data/slamrun-runs/trace-base-3747389/<ID>`。両 bag とも、`traj.tum`・`odom.bin`・`cloud.bin`・`cloud_frames.txt`・`params.txt` の SHA256 が、`OMP_NUM_THREADS` 未設定の `bl001-post-d8290e9` と一致した(要確認4: スレッド数を 1 にしても出力は変わらない)。
+- ROS の経路(T8 の基準): `~/data/slamrun-runs/trace-base-ros-3747389/<ID>/run01`〜`run10`。両 bag とも10回の `traj.tum` の SHA256 が一致した(avia `9bae6cd8c014a6a1…`・487 姿勢、ouster `a0752eec20114462…`・1985 姿勢。どちらもファイル駆動の `traj.tum` と同じ値)。`lidar loop back`・`imu loop back` は全回0件。run01 を T8 の基準にする(要確認4 の条件を満たした)。
+- ouster の最初の run07 は、`odom.bag` と `cloud.bag` がどちらもヘッダだけ(4117 バイト)で、`traj.tum` が0行だった。`node.log` は成功した回と同じ行数・内容で、ノードは IMU の初期化まで進んでいた。原因は確かめていない(`rosbag record` が購読に失敗した可能性があるが、推測)。記録は `run07-failed` に残し、人の判断で同じ条件で取り直した。取り直した run07 はほかの9回と一致した。実行の手順(`eval/run_cpp.sh`)の問題の候補として報告する(B の挙動ではない)。
