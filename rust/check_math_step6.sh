@@ -162,6 +162,17 @@ else:
     assert status == '2', status
     assert any(line.startswith('ERROR: ') and line.endswith('NaN/Inf')
                and '/so3_log.bin: record ' in line for line in lines)
+# Both profiles must import exactly these trig functions from glibc.
+for profile in ('debug', 'release'):
+    undefined = {}
+    for line in (out / f'baseline/{profile}/dynamic-symbols.txt').read_text().splitlines():
+        fields = line.split()
+        if '*UND*' in fields and len(fields) >= 2:
+            undefined[fields[-1]] = fields[-2]
+    trig = {name: version for name, version in undefined.items()
+            if name in ('sincos', 'sin', 'cos', 'acos', 'atan2')}
+    assert sorted(trig) == ['acos', 'atan2', 'sincos'], (profile, trig)
+    assert all(version.startswith('GLIBC_') for version in trig.values()), (profile, trig)
 print('Collected numeric evidence; disassembly and mutation failure causes require review.')
 PY
 printf 'Evidence: %s\n' "$output"
