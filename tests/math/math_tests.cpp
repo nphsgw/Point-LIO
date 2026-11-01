@@ -7,10 +7,14 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <malloc.h>
 #include <random>
 
 #include "Estimator.h"
+#include "mapping_core.h"
 #include "point_order.h"
+
+void publish_frame_world(MappingOutput &out);
 
 namespace {
 
@@ -365,6 +369,90 @@ TEST(SetInit, AntiParallelGravityGivesRotation)
         EXPECT_NEAR(r.determinant(), 1.0, 1e-15) << g.transpose();
         EXPECT_LE((r * g - t).norm(), 1e-14 * g.norm()) << g.transpose();
     }
+}
+
+// 台帳 BL-001: A は data_c[2]・data_c[3](オフセット40〜47)を未初期化のまま送る。
+// B は各点を0で埋めてから fields を書くので、fields の外のバイト(data[3] の 1.0f を含む)がすべて0になる。
+// 40〜47で A を確実に落とすのは M_PERTURB の埋め値。無効時は40〜47が0になり、A は14・15だけで落ちる(実測済み)。
+TEST(CloudRegistered, PaddingIsZero)
+{
+    struct RestoreGlobals {
+        PointCloudXYZI::Ptr body = feats_down_body, world = feats_down_world;
+        bool scan = scan_pub_en, save = pcd_save_en;
+        ~RestoreGlobals()
+        {
+            mallopt(M_PERTURB, 0);
+            feats_down_body = body;
+            feats_down_world = world;
+            scan_pub_en = scan;
+            pcd_save_en = save;
+        }
+    } restore;
+    ASSERT_NE(mallopt(M_PERTURB, 0x5a), 0);
+
+    // 48バイト × 23点で、glibc の通常の tcache のサイズ上限を超える見込み。
+    const size_t n = 23;
+    feats_down_body.reset(new PointCloudXYZI(n, 1));
+    feats_down_world.reset(new PointCloudXYZI(n, 1));
+    for (size_t i = 0; i < n; ++i) {
+        PointType p;
+        p.x = i + 0.25f;
+        p.y = -float(i) - 0.5f;
+        p.z = 2 * i + 0.75f;
+        p.intensity = 3 * i + 1.0f;
+        feats_down_world->points[i] = p;
+        p.x += 100;
+        feats_down_body->points[i] = p;
+    }
+    scan_pub_en = true;
+    pcd_save_en = false;
+
+    struct CaptureOutput : MappingOutput {
+        sensor_msgs::PointCloud2 msg;
+        int calls = 0;
+        void odometry(const nav_msgs::Odometry &) override {}
+        void path(const nav_msgs::Path &) override {}
+        void cloud_registered(const sensor_msgs::PointCloud2 &cloud) override { msg = cloud; ++calls; }
+        void cloud_registered_body(const sensor_msgs::PointCloud2 &) override {}
+        void laser_map(const sensor_msgs::PointCloud2 &) override {}
+    } out;
+    publish_frame_world(out);
+    ASSERT_EQ(out.calls, 1);
+    const auto &msg = out.msg;
+    ASSERT_EQ(msg.width, n);
+    ASSERT_EQ(msg.height, 1u);
+    ASSERT_GT(msg.point_step, 0u);
+    ASSERT_GE(msg.data.size(), n * msg.point_step);
+
+    std::vector<bool> covered(msg.point_step, false);
+    size_t checked_fields = 0;
+    ASSERT_FALSE(msg.is_bigendian); // Docker の x86-64 と同じ float 表現で読む。
+    for (const auto &field : msg.fields) {
+        ASSERT_EQ(field.datatype, sensor_msgs::PointField::FLOAT32);
+        ASSERT_EQ(field.count, 1u);
+        ASSERT_LE(field.offset + sizeof(float), msg.point_step);
+        for (size_t b = field.offset; b < field.offset + sizeof(float); ++b) covered[b] = true;
+
+        if (field.name != "x" && field.name != "y" && field.name != "z" && field.name != "intensity") continue;
+        ++checked_fields;
+        for (size_t i = 0; i < n; ++i) {
+            const auto &p = feats_down_world->points[i];
+            const float expected = field.name == "x" ? p.x : field.name == "y" ? p.y :
+                                   field.name == "z" ? p.z : p.intensity;
+            float actual;
+            std::memcpy(&actual, &msg.data[i * msg.point_step + field.offset], sizeof(actual));
+            EXPECT_EQ(actual, expected) << "point " << i << " field " << field.name;
+        }
+    }
+    ASSERT_EQ(checked_fields, 4u);
+    size_t checked_padding = 0;
+    for (size_t i = 0; i < n; ++i)
+        for (size_t b = 0; b < msg.point_step; ++b)
+            if (!covered[b]) {
+                EXPECT_EQ(msg.data[i * msg.point_step + b], 0u) << "point " << i << " offset " << b;
+                ++checked_padding;
+            }
+    EXPECT_GT(checked_padding, 0u);
 }
 
 // --- iVox の近傍探索 ---
