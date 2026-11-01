@@ -175,7 +175,7 @@ B(C++)の `pointlio_offline` に、仕様のトレース(`trace.bin`。完全と
 
 どの手順も、5節の「手順」の列の行をテストとして先に書き、Red を確かめてから実装する。手順2〜7は、その段階のペイロードの読み手を `trace_format.py` に足し、段階の項目が欠けた記録を落とすこと(Red)を先に確かめる。B の本体(`src/`・`include/`)を変えた手順は、その終わりに完了条件1を両 bag で確かめる。手順10〜13で記録に漏れ(仕様 §5.3「第4.4節に足す」)や、くくり出しの不足が見つかったら、止めて報告する(仕様の変更は人の承認が要る)。
 
-- [ ] 手順0 基準: 改造の直前の B(`3747389`)で、両 bag の `pointlio_offline` を `OMP_NUM_THREADS=1` で実行し、`~/data/slamrun-runs/trace-base-3747389` に置く。`bl001-post-d8290e9`(未設定)とビット一致するかも記録する。同じ B の ROS の実行を、`OMP_NUM_THREADS=1 eval/run_cpp.sh` で両 bag 10回ずつ取り、`~/data/slamrun-runs/trace-base-ros-3747389` に置いて T8 の基準にする(手順は ros-free-harness.md の手順0と同じ)。10回の `traj.tum` と `odom` がビット一致したときだけ run01 を基準にし、一致しなければ止めて報告する(要確認4)。T8 の幅は `check_runs.py` の `TAU`(A の `tau_harness`)をそのまま使う。使ったイメージの ID を記録し、以後の比較で同じイメージを使う
+- [x] 手順0 基準(`d73a7ac`。下の「手順0の実施記録」): 改造の直前の B(`3747389`)で、両 bag の `pointlio_offline` を `OMP_NUM_THREADS=1` で実行し、`~/data/slamrun-runs/trace-base-3747389` に置く。`bl001-post-d8290e9`(未設定)とビット一致するかも記録する。同じ B の ROS の実行を、`OMP_NUM_THREADS=1 eval/run_cpp.sh` で両 bag 10回ずつ取り、`~/data/slamrun-runs/trace-base-ros-3747389` に置いて T8 の基準にする(手順は ros-free-harness.md の手順0と同じ)。10回の `traj.tum` と `odom` がビット一致したときだけ run01 を基準にし、一致しなければ止めて報告する(要確認4)。T8 の幅は `check_runs.py` の `TAU`(A の `tau_harness`)をそのまま使う。使ったイメージの ID を記録し、以後の比較で同じイメージを使う
 - [ ] 手順1 段階のくくり出しと、`Q_output`・`P_init_output` を取り出す関数(3.5)。記録はまだ入れない
 - [ ] 手順2 土台: xxHash64(C++ と Python)、書き手(先頭、レコード、終わりのレコード、識別子、終了コード、間引かない引数)、正規の並び、形式の検証器(先頭と終わりのレコード)、`--trace` の引数、`run_trace.sh`(任意の PLIN を含む)、合成の PLIN の切り出し(長さは仮に決める)、`trace_preprocess_dump`、CMake。先頭と終わりのレコードだけを書く。読みの速さを測る(要確認1)
 - [ ] 手順3 S1a・S1b・S2a・S2b
