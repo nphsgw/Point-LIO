@@ -77,7 +77,10 @@ class IVox {
     bool GetClosestPoint(const PointType& pt, PointType& closest_pt);
 
     /// get nn with condition
-    bool GetClosestPoint(const PointType& pt, PointVector& closest_pt, int max_num = 5, double max_range = 5.0);
+    /// BL-012: 距離が max_range 未満の候補から、(距離, pid) の小さい max_num 点をその順に返す。
+    /// next が非 null なら、選ばれなかった候補のうち (距離, pid) で最小のものを入れる(なければ node が nullptr)
+    bool GetClosestPoint(const PointType& pt, PointVector& closest_pt, int max_num = 5, double max_range = 5.0,
+                         DistPoint* next = nullptr);
 
     /// get nn in cloud
     bool GetClosestPoint(const PointVector& cloud, PointVector& closest_cloud);
@@ -108,6 +111,7 @@ class IVox {
         // grids_map_;                                        // voxel hash map
     std::list<std::pair<KeyType, NodeType>> grids_cache_;  // voxel cache
     std::vector<KeyType> nearby_grids_;                    // nearbys
+    uint32_t next_pid_ = 0;                                // BL-012: 次に挿入する点の pid
 };
 
 template <int dim, IVoxNodeType node_type, typename PointType>
@@ -137,9 +141,12 @@ bool IVox<dim, node_type, PointType>::GetClosestPoint(const PointType& pt, Point
 
 template <int dim, IVoxNodeType node_type, typename PointType>
 bool IVox<dim, node_type, PointType>::GetClosestPoint(const PointType& pt, PointVector& closest_pt, int max_num,
-                                                      double max_range) {
+                                                      double max_range, DistPoint* next) {
     std::vector<DistPoint> candidates;
-    candidates.reserve(max_num * nearby_grids_.size());
+    candidates.reserve((max_num + 1) * nearby_grids_.size());
+    if (next != nullptr) {
+        *next = DistPoint();
+    }
 
     auto key = Pos2Grid(ToEigen<float, dim>(pt));
 
@@ -177,12 +184,18 @@ bool IVox<dim, node_type, PointType>::GetClosestPoint(const PointType& pt, Point
     auto t1 = std::chrono::high_resolution_clock::now();
 #endif
 
-    if (candidates.size() <= max_num) {
-    } else {
-        std::nth_element(candidates.begin(), candidates.begin() + max_num - 1, candidates.end());
+    // BL-012: (距離, pid) の小さい max_num + 1 点を並べ、max_num + 1 番目を次の候補とする
+    if (candidates.size() > max_num + 1) {
+        std::nth_element(candidates.begin(), candidates.begin() + max_num, candidates.end());
+        candidates.resize(max_num + 1);
+    }
+    std::sort(candidates.begin(), candidates.end());
+    if (candidates.size() > max_num) {
+        if (next != nullptr) {
+            *next = candidates[max_num];
+        }
         candidates.resize(max_num);
     }
-    std::nth_element(candidates.begin(), candidates.begin(), candidates.end());
 
 #ifdef INNER_TIMER
     auto t2 = std::chrono::high_resolution_clock::now();
@@ -270,14 +283,14 @@ void IVox<dim, node_type, PointType>::AddPoints(const PointVector& points_to_add
             grids_cache_.push_front({key, NodeType(center, options_.resolution_)});
             grids_map_.insert({key, grids_cache_.begin()});
 
-            grids_cache_.front().second.InsertPoint(points_to_add[i]);
+            grids_cache_.front().second.InsertPoint(points_to_add[i], next_pid_++);
 
             if (grids_map_.size() >= options_.capacity_) {
                 grids_map_.erase(grids_cache_.back().first);
                 grids_cache_.pop_back();
             }
         } else {
-            iter->second->second.InsertPoint(points_to_add[i]);
+            iter->second->second.InsertPoint(points_to_add[i], next_pid_++);
             grids_cache_.splice(grids_cache_.begin(), grids_cache_, iter->second);
             grids_map_[key] = grids_cache_.begin();
         }

@@ -48,7 +48,7 @@ class IVoxNode {
     IVoxNode() = default;
     IVoxNode(const PointT& center, const float& side_length) {}  /// same with phc
 
-    void InsertPoint(const PointT& pt);
+    void InsertPoint(const PointT& pt, const uint32_t pid);
 
     inline bool Empty() const;
 
@@ -56,11 +56,14 @@ class IVoxNode {
 
     inline PointT GetPoint(const std::size_t idx) const;
 
+    // BL-012: 距離が max_range 未満の点のうち、(距離, pid) の小さい K + 1 点を dis_points に足す。
+    // 1点多く残すのは、全体での次の候補(K + 1 番目)を取りこぼさないため
     int KNNPointByCondition(std::vector<DistPoint>& dis_points, const PointT& point, const int& K,
                             const double& max_range);
 
    private:
     std::vector<PointT> points_;
+    std::vector<uint32_t> pids_;  // BL-012: points_ と並ぶ、iVox に挿入した点の通し番号
 };
 
 template <typename PointT, int dim = 3>
@@ -108,20 +111,23 @@ struct IVoxNode<PointT, dim>::DistPoint {
     double dist = 0;
     IVoxNode* node = nullptr;
     int idx = 0;
+    uint32_t pid = 0;
 
     DistPoint() = default;
-    DistPoint(const double d, IVoxNode* n, const int i) : dist(d), node(n), idx(i) {}
+    DistPoint(const double d, IVoxNode* n, const int i) : dist(d), node(n), idx(i), pid(n->pids_[i]) {}
 
     PointT Get() { return node->GetPoint(idx); }
 
-    inline bool operator()(const DistPoint& p1, const DistPoint& p2) { return p1.dist < p2.dist; }
+    // BL-012: (距離, pid) の辞書順。pid は点ごとに異なるので全順序になり、選ぶ点と並びがソートの実装に依存しない
+    inline bool operator()(const DistPoint& p1, const DistPoint& p2) { return p1 < p2; }
 
-    inline bool operator<(const DistPoint& rhs) { return dist < rhs.dist; }
+    inline bool operator<(const DistPoint& rhs) const { return dist < rhs.dist || (dist == rhs.dist && pid < rhs.pid); }
 };
 
 template <typename PointT, int dim>
-void IVoxNode<PointT, dim>::InsertPoint(const PointT& pt) {
+void IVoxNode<PointT, dim>::InsertPoint(const PointT& pt, const uint32_t pid) {
     points_.template emplace_back(pt);
+    pids_.emplace_back(pid);
 }
 
 template <typename PointT, int dim>
@@ -178,10 +184,10 @@ int IVoxNode<PointT, dim>::KNNPointByCondition(std::vector<DistPoint>& dis_point
     auto t1 = std::chrono::high_resolution_clock::now();
 #endif
     // sort by distance
-    if (old_size + K >= dis_points.size()) {
+    if (old_size + K + 1 >= dis_points.size()) {
     } else {
-        std::nth_element(dis_points.begin() + old_size, dis_points.begin() + old_size + K - 1, dis_points.end());
-        dis_points.resize(old_size + K);
+        std::nth_element(dis_points.begin() + old_size, dis_points.begin() + old_size + K, dis_points.end());
+        dis_points.resize(old_size + K + 1);
     }
 
 #ifdef INNER_TIMER

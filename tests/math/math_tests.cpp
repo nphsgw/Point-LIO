@@ -395,6 +395,144 @@ TEST(IVoxClosest, NoCandidateClearsOutput)
     EXPECT_EQ(out[0].x, far.x);
 }
 
+// 格子の上の点(座標が 0.05 の倍数)。距離の等しい点と重なる点が多い。intensity に挿入の順の添字を入れる
+PointVector lattice_points(int n, std::uint64_t seed)
+{
+    std::mt19937_64 rng(seed);
+    std::uniform_int_distribution<int> c(-8, 8);
+    PointVector pts;
+    for (int i = 0; i < n; ++i)
+    {
+        PointType p;
+        p.x = 0.05f * c(rng);
+        p.y = 0.05f * c(rng);
+        p.z = 0.05f * c(rng);
+        p.intensity = static_cast<float>(i);
+        pts.push_back(p);
+    }
+    return pts;
+}
+
+// 期待値: 距離が範囲内の全点を (距離, 挿入の順) で並べたもの。距離は iVox と同じ distance2
+std::vector<std::pair<double, int>> brute_force_neighbours(const PointVector &pts, const PointType &q, double max_range)
+{
+    std::vector<std::pair<double, int>> all;
+    for (size_t i = 0; i < pts.size(); ++i)
+    {
+        double d = faster_lio::distance2(pts[i], q);
+        if (d < max_range * max_range)
+            all.emplace_back(d, static_cast<int>(i));
+    }
+    std::sort(all.begin(), all.end());
+    return all;
+}
+
+// 範囲を格子の幅と同じにすると、範囲内の点はすべて 26 近傍のセルに入るので、総当たりと比べられる
+IVoxType::Options lattice_options()
+{
+    IVoxType::Options opt;
+    opt.resolution_ = 0.2;
+    opt.nearby_type_ = IVoxType::NearbyType::NEARBY26;
+    return opt;
+}
+
+// 台帳 BL-012: A は nth_element で選ぶので、2番目以降の並びと、距離の等しい候補のどれを選ぶかが実装で決まる
+TEST(IVoxClosest, NearestByDistanceThenInsertionOrder)
+{
+    const double max_range = 0.2;
+    int checked = 0, with_ties = 0;
+    for (std::uint64_t seed = 1; seed <= 20; ++seed)
+    {
+        PointVector pts = lattice_points(400, seed);
+        IVoxType ivox(lattice_options());
+        ivox.AddPoints(pts);
+        PointVector queries = lattice_points(50, seed + 1000);
+        for (const PointType &q : queries)
+        {
+            auto expected = brute_force_neighbours(pts, q, max_range);
+            PointVector out;
+            bool found = ivox.GetClosestPoint(q, out, 5, max_range);
+            ASSERT_EQ(found, !expected.empty()) << seed;
+            ASSERT_EQ(out.size(), std::min<size_t>(5, expected.size())) << seed;
+            for (size_t j = 0; j < out.size(); ++j)
+                EXPECT_EQ(out[j].intensity, static_cast<float>(expected[j].second)) << seed << " " << j;
+            if (expected.size() > 5 && expected[4].first == expected[5].first)
+                ++with_ties;
+            ++checked;
+        }
+    }
+    EXPECT_EQ(checked, 20 * 50);
+    // 境目に距離の等しい候補がある問い合わせを十分に含む(入力が試したい場合を含むことの確認)
+    EXPECT_GT(with_ties, 100) << with_ties;
+}
+
+// 次の候補は、ノードごとの切り詰めの前の全体での 6 番目。1つのノードが近い 6 点をすべて持つ場合を含む
+TEST(IVoxClosest, NextCandidateIsSixthOverall)
+{
+    // 1つのセルに 7 点、隣のセルに遠い 1 点
+    IVoxType ivox(lattice_options());
+    PointVector pts;
+    for (int i = 0; i < 7; ++i)
+    {
+        PointType p;
+        p.x = 0.01f * (i + 1);
+        p.y = 0.01f;
+        p.z = 0.01f;
+        p.intensity = static_cast<float>(i);
+        pts.push_back(p);
+    }
+    PointType far;
+    far.x = 0.21f;
+    far.y = 0.01f;
+    far.z = 0.01f;
+    far.intensity = 7;
+    pts.push_back(far);
+    ivox.AddPoints(pts);
+
+    PointType q;
+    q.x = 0;
+    q.y = 0.01f;
+    q.z = 0.01f;
+    PointVector out;
+    IVoxType::DistPoint next;
+    ASSERT_TRUE(ivox.GetClosestPoint(q, out, 5, 0.3, &next));
+    ASSERT_EQ(out.size(), 5u);
+    ASSERT_NE(next.node, nullptr);
+    EXPECT_EQ(next.pid, 5u);
+    EXPECT_EQ(next.dist, faster_lio::distance2(pts[5], q));
+    EXPECT_EQ(next.Get().intensity, 5);
+
+    // 範囲内の候補が 5 点以下なら次の候補はない
+    ASSERT_TRUE(ivox.GetClosestPoint(q, out, 5, 0.055, &next));
+    EXPECT_EQ(out.size(), 5u);
+    EXPECT_EQ(next.node, nullptr);
+
+    // 総当たりとの比較: 次の候補の距離と pid(挿入の順と同じ)
+    int checked = 0;
+    for (std::uint64_t seed = 1; seed <= 20; ++seed)
+    {
+        PointVector lp = lattice_points(400, seed);
+        IVoxType lv(lattice_options());
+        lv.AddPoints(lp);
+        for (const PointType &lq : lattice_points(50, seed + 1000))
+        {
+            auto expected = brute_force_neighbours(lp, lq, 0.2);
+            PointVector lo;
+            lv.GetClosestPoint(lq, lo, 5, 0.2, &next);
+            if (expected.size() <= 5)
+            {
+                EXPECT_EQ(next.node, nullptr) << seed;
+                continue;
+            }
+            ASSERT_NE(next.node, nullptr) << seed;
+            EXPECT_EQ(next.dist, expected[5].first) << seed;
+            EXPECT_EQ(next.pid, static_cast<uint32_t>(expected[5].second)) << seed;
+            ++checked;
+        }
+    }
+    EXPECT_GT(checked, 500) << checked;
+}
+
 
 // --- 点の並び ---
 
