@@ -177,6 +177,7 @@ void publish_frame_world(MappingOutput & out)
         
         for (int i = 0; i < size; i++)
         {
+            memset(&laserCloudWorld->points[i], 0, sizeof(PointType));
             laserCloudWorld->points[i].x = feats_down_world->points[i].x;
             laserCloudWorld->points[i].y = feats_down_world->points[i].y;
             laserCloudWorld->points[i].z = feats_down_world->points[i].z;
