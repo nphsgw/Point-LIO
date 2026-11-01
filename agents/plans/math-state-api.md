@@ -75,6 +75,18 @@ pub fn predict(
 
 過程モデルは状態を変更しないので共有参照で受ける。参照されない `input_ikfom` は承認済みプランどおり受けない。`predict` は状態と共分散を借用して更新し、Q と dt は変更しない。C++ と同じ2つのフラグを保つ。両方 true のときは状態を更新した後で f と df/dx を再計算し、両方 false のときは何もしない。範囲内での数値検証は既定の片方ずつの呼び出しで行う。
 
+## PLGOLD01 の入出力 (承認後の追記)
+
+承認した API 案に載っていなかったが、手順3で `golden` モジュールを公開した。これはプラン 3.1 の構成にある golden.rs で、`math_golden` の bin と入出力のテストから使う。この2つは別の crate として扱われるので、公開が要る。数学の API ではなく、照合用の道具である。2026-11-01 の手順8の差分レビューで指摘があり、範囲内の逸脱として記録した。
+
+```rust
+pub struct Component { pub name: &'static str, pub input_len: usize, pub output_len: usize }
+pub const COMPONENTS: [Component; 13];
+pub struct Record { pub input: Vec<f64>, pub output: Vec<f64> }
+pub fn decode(bytes: &[u8], component: Component) -> io::Result<Vec<Record>>;
+pub fn encode(records: &[Record], component: Component) -> io::Result<Vec<u8>>;
+```
+
 ## Red の作り方
 
 型・フィールド・シグネチャを定義し、数値関数の本体は `todo!` にする。テストはコンパイルでき、14件が未実装関数に到達して失敗することを確認する。これは数値アサーションの検出力の確認とは区別する。実装後の14件の通過と、BL-008 の修正を戻した場合の失敗は後続手順で確認する。
