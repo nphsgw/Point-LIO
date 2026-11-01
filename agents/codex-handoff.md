@@ -51,7 +51,7 @@ agents/handoff/run_codex.sh resume "$(cat <前の名前>.session)" <修正の指
 
 したがって、リポジトリの外を変えないことは、指示書の禁止事項と R1 の確認で守る。R1 が見るのはリポジトリの中だけで、リポジトリの外への書き込みは検出できない。
 
-モデルは `gpt-6-sol`(`CODEX_MODEL` で替えられる)。`~/.codex/config.toml` の既定の `gpt-6.1-sol` は、ChatGPT のアカウントでは使えない(400 `model_not_found`、2026-11-01)。
+モデルは `~/.codex/config.toml` の既定に従う(`CODEX_MODEL` で替えられる)。古い CLI は新しいモデルを拒む: 0.157.1 では `gpt-6.1-sol` が 400 `model_not_found` になり、0.166.0 では通った(2026-11-01)。拒まれたら、まず `codex update` を試す。
 
 ## 4. レビュー
 

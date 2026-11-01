@@ -3,14 +3,14 @@
 # Usage: agents/handoff/run_codex.sh new <brief.md> <output prefix>
 #        agents/handoff/run_codex.sh resume <session id> <brief.md> <output prefix>
 # Writes <prefix>.events.jsonl, <prefix>.report.json and <prefix>.session (the session id).
-# CODEX_MODEL overrides the model.
+# The model is the default in ~/.codex/config.toml; CODEX_MODEL overrides it.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 schema="$repo/agents/handoff/report.schema.json"
 usage() { echo "usage: $0 new <brief> <prefix> | resume <session id> <brief> <prefix>" >&2; exit 2; }
 
 # The Docker client reaches /var/run/docker.sock only when the sandbox allows network access.
-opts=(-m "${CODEX_MODEL:-gpt-6-sol}"
+opts=(${CODEX_MODEL:+-m "$CODEX_MODEL"}
       -c sandbox_mode='"workspace-write"'
       -c sandbox_workspace_write.network_access=true
       --json --output-schema "$schema")
