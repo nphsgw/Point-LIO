@@ -60,7 +60,7 @@ debug は3つの動的参照、release は上表の8箇所で全て。`sin`・`c
 
 同じイメージ・CPU・`OMP_NUM_THREADS=1` で、現行 B の `math_golden` と `pointlio_offline` もビルドした。ソースはリポジトリの読み取り専用 mount。記録先は `~/data/slamrun-runs/c-step6-30e5d51/b-targets`。
 
-全ターゲットの `catkin_make` は、無関係な Livox ドライバの SDK ヘッダ (`livox_def.h`・`livox_sdk.h`) 不足で失敗した (`~/data/slamrun-runs/c-step6-30e5d51/b-full-build/build.log`)。その後、[以前の B 検証](bl011-b-fix-validation.md)に記載済みの対象限定コマンドでビルドに成功した:
+全ターゲットの `catkin_make` は、無関係な Livox ドライバの SDK ヘッダ (`livox_def.h`・`livox_sdk.h`) 不足で失敗した (`~/data/slamrun-runs/c-step6-30e5d51/b-full-build/build.log`)。原因は `--network none` で実行したこと。livox_ros_driver の CMake がビルドのたびに Livox-SDK を GitHub から clone し、その取得に失敗した (ログ132行)。2026-11-01 に同じイメージで、ネットワークありなら全体ビルドが終了0、`--network none` なら同じエラーで終了1になることを再現した。どちらでも `pointlio_offline`・`pointlio_mapping` はビルドされた。point_lio が livox_ros_driver から使うのはメッセージ型だけ。その後、[以前の B 検証](bl011-b-fix-validation.md)に記載済みの対象限定コマンドでビルドに成功した:
 
 ```bash
 # 固定イメージ内で ROS と /ws/devel/setup.sh を source した後、/ws で実行
