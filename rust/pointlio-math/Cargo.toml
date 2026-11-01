@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 publish = false
+
+# lib.rs's crate attribute does not reach the bin and test crates.
+# libm.rs keeps its module-level allow for the sincos FFI.
+[lints.rust]
+unsafe_code = "deny"
