@@ -6,7 +6,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 [[ $# = 1 ]] || { echo "usage: $0 <new output directory>" >&2; exit 2; }
 output=$(realpath -m -- "$1")
-case "$output" in "$repo/golden"|"$repo/golden/"*) echo 'golden/ is forbidden' >&2; exit 2 ;; esac
+case "$output" in "$repo"|"$repo/"*) echo 'output must be outside the repository' >&2; exit 2 ;; esac
 [[ ! -e "$output" ]] || { echo 'output directory already exists' >&2; exit 2; }
 stub=${POINTLIO_MATH_STUB:-real}
 component=${POINTLIO_MATH_COMPONENT:-}
