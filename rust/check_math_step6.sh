@@ -153,7 +153,15 @@ assert (out / 'bl008-reverted/l1-exit.txt').read_text().strip() == '101'
 log = (out / 'bl008-reverted/l1.log').read_text()
 for name in ('so3_log_finite_near_pi', 'so3_log_accurate_around_near_pi_branch'):
     assert f'test {name} ... FAILED' in log
-assert (out / 'bl008-reverted/release/comparison-exit.txt').read_text().strip() in ('1', '2')
+# The comparison must fail in so3_log itself, not in some other component.
+status = (out / 'bl008-reverted/release/comparison-exit.txt').read_text().strip()
+lines = (out / 'bl008-reverted/release/comparison.log').read_text().splitlines()
+if status == '1':
+    assert any(line.startswith('FAIL so3_log:') for line in lines)
+else:
+    assert status == '2', status
+    assert any(line.startswith('ERROR: ') and line.endswith('NaN/Inf')
+               and '/so3_log.bin: record ' in line for line in lines)
 print('Collected numeric evidence; disassembly and mutation failure causes require review.')
 PY
 printf 'Evidence: %s\n' "$output"
