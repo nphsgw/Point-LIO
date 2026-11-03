@@ -362,40 +362,18 @@ void open_debug_logs()
     open_file();
 }
 
-// 改造前の main() のループで、sync_packages(Measures) が true のときに実行していた本体。
-// 行の並びとインデントは元のまま。continue は return に、各 publish の引数は out に置き換えた
-void process_measures(MappingOutput &out)
+const Eigen::Matrix<double, 30, 30> &get_Q_output()
 {
+    return Q_output;
+}
 
-            if (flg_reset)
-            {
-                ROS_WARN("reset when rosbag play back");
-                p_imu->Reset();
-                feats_undistort.reset(new PointCloudXYZI());
-                if (use_imu_as_input)
-                {
-                    // state_in = kf_input.get_x();
-                    state_in = state_input();
-                    kf_input.change_P(P_init);
-                }
-                else
-                {
-                    // state_out = kf_output.get_x();
-                    state_out = state_output();
-                    kf_output.change_P(P_init_output);
-                }
-                flg_first_scan = true;
-                is_first_frame = true;
-                flg_reset = false;
-                init_map = false;
-                
-                {
-                    ivox_.reset(new IVoxType(ivox_options_));
-                }
-            }
+const Eigen::Matrix<double, 30, 30> &get_P_init_output()
+{
+    return P_init_output;
+}
 
-            if (flg_first_scan)
-            {
+void first_frame_init()
+{
                 first_lidar_time = Measures.lidar_beg_time;
                 flg_first_scan = false;
                 if (first_imu_time < 1)
@@ -436,18 +414,10 @@ void process_measures(MappingOutput &out)
                     // p_imu->after_imu_init_ = true;
                 }     
                 G_m_s2 = std::sqrt(gravity[0] * gravity[0] + gravity[1] * gravity[1] + gravity[2] * gravity[2]);
-            }
+}
 
-            double t0,t1,t2,t3,t4,t5,match_start, solve_start;
-            match_time = 0;
-            solve_time = 0;
-            propag_time = 0;
-            update_time = 0;
-            t0 = omp_get_wtime();
-            
-            /*** downsample the feature points in a scan ***/
-            t1 = omp_get_wtime();
-            p_imu->Process(Measures, feats_undistort);
+void downsample_frame()
+{
             if(space_down_sample)
             {
                 downSizeFilterSurf.setInputCloud(feats_undistort);
@@ -463,11 +433,10 @@ void process_measures(MappingOutput &out)
                 time_seq = time_compressing<int>(feats_down_body);
                 feats_down_size = feats_down_body->points.size();
             }
+}
 
-            if (!p_imu->after_imu_init_) // !p_imu->UseLIInit && 
-            {
-                if (!p_imu->imu_need_init_)
-                { 
+void init_attitude()
+{
                     V3D tmp_gravity;
                     if (imu_en)
                     {tmp_gravity = - p_imu->mean_acc / p_imu->mean_acc.norm() * G_m_s2;}
@@ -483,13 +452,10 @@ void process_measures(MappingOutput &out)
                     // kf_input.x_.rot; //.normalize();
                     // kf_output.x_.rot; //.normalize();
                     kf_output.x_.acc = - rot_init.transpose() * kf_output.x_.gravity;
-                }
-                else{
-                return;}
-            }
-            /*** initialize the map ***/
-            if(!init_map)
-            {
+}
+
+void init_map_frame(MappingOutput &out)
+{
                 feats_down_world->resize(feats_undistort->size());
                 for(int i = 0; i < feats_undistort->size(); i++)
                 {
@@ -511,6 +477,167 @@ void process_measures(MappingOutput &out)
                     init_feats_world.reset(new PointCloudXYZI());
                     init_map = true;
                 }
+}
+
+void group_begin(bool &imu_upda_cov)
+{
+                    if (is_first_frame)
+                    {
+                        if(imu_en)
+                        {
+                            while (time_current > imu_next.header.stamp.toSec())
+                            {
+                                imu_deque.pop_front();
+                                if (imu_deque.empty()) break;
+                                imu_last = imu_next;
+                                imu_next = *(imu_deque.front());
+                            }
+                            angvel_avr<<imu_last.angular_velocity.x, imu_last.angular_velocity.y, imu_last.angular_velocity.z;
+                            acc_avr   <<imu_last.linear_acceleration.x, imu_last.linear_acceleration.y, imu_last.linear_acceleration.z;
+                        }
+                        is_first_frame = false;
+                        imu_upda_cov = true;
+                        time_update_last = time_current;
+                        time_predict_last_const = time_current;
+                    }
+}
+
+void advance_imu_queue()
+{
+                        bool last_imu = imu_next.header.stamp.toSec() == imu_deque.front()->header.stamp.toSec();
+                        while (imu_next.header.stamp.toSec() < time_predict_last_const && !imu_deque.empty())
+                        {
+                            if (!last_imu)
+                            {
+                                imu_last = imu_next;
+                                imu_next = *(imu_deque.front());
+                                break;
+                            }
+                            else
+                            {
+                                imu_deque.pop_front();
+                                if (imu_deque.empty()) break;
+                                imu_last = imu_next;
+                                imu_next = *(imu_deque.front());
+                            }
+                        }
+}
+
+void predict_state_to_imu()
+{
+                            double dt = imu_next.header.stamp.toSec() - time_predict_last_const;
+                            kf_output.predict(dt, Q_output, input_in, true, false);
+                            time_predict_last_const = imu_next.header.stamp.toSec(); // big problem
+}
+
+bool predict_cov_to_imu()
+{
+                                double dt_cov = imu_next.header.stamp.toSec() - time_update_last; 
+
+                                if (dt_cov > 0.0)
+                                {
+                                    time_update_last = imu_next.header.stamp.toSec();
+                                    double propag_imu_start = omp_get_wtime();
+
+                                    kf_output.predict(dt_cov, Q_output, input_in, false, true);
+
+                                    propag_time += omp_get_wtime() - propag_imu_start;
+                                    return true;
+                                }
+                                return false;
+}
+
+void predict_state_to_group()
+{
+                    double dt = time_current - time_predict_last_const;
+                    double propag_state_start = omp_get_wtime();
+                    if(!prop_at_freq_of_imu)
+                    {
+                        double dt_cov = time_current - time_update_last;
+                        if (dt_cov > 0.0)
+                        {
+                            kf_output.predict(dt_cov, Q_output, input_in, false, true);
+                            time_update_last = time_current;   
+                        }
+                    }
+                    kf_output.predict(dt, Q_output, input_in, true, false);
+                    propag_time += omp_get_wtime() - propag_state_start;
+                    time_predict_last_const = time_current;
+}
+
+void transform_group_points()
+{
+                    for (int j = 0; j < time_seq[k]; j++)
+                    {
+                        PointType &point_body_j  = feats_down_body->points[idx+j+1];
+                        PointType &point_world_j = feats_down_world->points[idx+j+1];
+                        pointBodyToWorld(&point_body_j, &point_world_j);
+                    }
+}
+
+// 改造前の main() のループで、sync_packages(Measures) が true のときに実行していた本体。
+// 行の並びとインデントは元のまま。continue は return に、各 publish の引数は out に置き換えた
+// 段階の一部は、行を並べ替えずに関数へくくり出した
+void process_measures(MappingOutput &out)
+{
+
+            if (flg_reset)
+            {
+                ROS_WARN("reset when rosbag play back");
+                p_imu->Reset();
+                feats_undistort.reset(new PointCloudXYZI());
+                if (use_imu_as_input)
+                {
+                    // state_in = kf_input.get_x();
+                    state_in = state_input();
+                    kf_input.change_P(P_init);
+                }
+                else
+                {
+                    // state_out = kf_output.get_x();
+                    state_out = state_output();
+                    kf_output.change_P(P_init_output);
+                }
+                flg_first_scan = true;
+                is_first_frame = true;
+                flg_reset = false;
+                init_map = false;
+                
+                {
+                    ivox_.reset(new IVoxType(ivox_options_));
+                }
+            }
+
+            if (flg_first_scan)
+            {
+                first_frame_init();
+            }
+
+            double t0,t1,t2,t3,t4,t5,match_start, solve_start;
+            match_time = 0;
+            solve_time = 0;
+            propag_time = 0;
+            update_time = 0;
+            t0 = omp_get_wtime();
+            
+            /*** downsample the feature points in a scan ***/
+            t1 = omp_get_wtime();
+            p_imu->Process(Measures, feats_undistort);
+            downsample_frame();
+
+            if (!p_imu->after_imu_init_) // !p_imu->UseLIInit && 
+            {
+                if (!p_imu->imu_need_init_)
+                { 
+                    init_attitude();
+                }
+                else{
+                return;}
+            }
+            /*** initialize the map ***/
+            if(!init_map)
+            {
+                init_map_frame(out);
                 return;
             }
 
@@ -567,44 +694,10 @@ void process_measures(MappingOutput &out)
 
                     time_current = point_body.curvature / 1000.0 + pcl_beg_time;
 
-                    if (is_first_frame)
-                    {
-                        if(imu_en)
-                        {
-                            while (time_current > imu_next.header.stamp.toSec())
-                            {
-                                imu_deque.pop_front();
-                                if (imu_deque.empty()) break;
-                                imu_last = imu_next;
-                                imu_next = *(imu_deque.front());
-                            }
-                            angvel_avr<<imu_last.angular_velocity.x, imu_last.angular_velocity.y, imu_last.angular_velocity.z;
-                            acc_avr   <<imu_last.linear_acceleration.x, imu_last.linear_acceleration.y, imu_last.linear_acceleration.z;
-                        }
-                        is_first_frame = false;
-                        imu_upda_cov = true;
-                        time_update_last = time_current;
-                        time_predict_last_const = time_current;
-                    }
+                    group_begin(imu_upda_cov);
                     if(imu_en && !imu_deque.empty())
                     {
-                        bool last_imu = imu_next.header.stamp.toSec() == imu_deque.front()->header.stamp.toSec();
-                        while (imu_next.header.stamp.toSec() < time_predict_last_const && !imu_deque.empty())
-                        {
-                            if (!last_imu)
-                            {
-                                imu_last = imu_next;
-                                imu_next = *(imu_deque.front());
-                                break;
-                            }
-                            else
-                            {
-                                imu_deque.pop_front();
-                                if (imu_deque.empty()) break;
-                                imu_last = imu_next;
-                                imu_next = *(imu_deque.front());
-                            }
-                        }
+                        advance_imu_queue();
                         bool imu_comes = time_current > imu_next.header.stamp.toSec();
                         while (imu_comes) 
                         {
@@ -613,21 +706,11 @@ void process_measures(MappingOutput &out)
                             acc_avr   <<imu_next.linear_acceleration.x, imu_next.linear_acceleration.y, imu_next.linear_acceleration.z;
 
                             /*** covariance update ***/
-                            double dt = imu_next.header.stamp.toSec() - time_predict_last_const;
-                            kf_output.predict(dt, Q_output, input_in, true, false);
-                            time_predict_last_const = imu_next.header.stamp.toSec(); // big problem
+                            predict_state_to_imu();
                             
                             {
-                                double dt_cov = imu_next.header.stamp.toSec() - time_update_last; 
-
-                                if (dt_cov > 0.0)
+                                if (predict_cov_to_imu())
                                 {
-                                    time_update_last = imu_next.header.stamp.toSec();
-                                    double propag_imu_start = omp_get_wtime();
-
-                                    kf_output.predict(dt_cov, Q_output, input_in, false, true);
-
-                                    propag_time += omp_get_wtime() - propag_imu_start;
                                     double solve_imu_start = omp_get_wtime();
                                     kf_output.update_iterated_dyn_share_IMU();
                                     solve_time += omp_get_wtime() - solve_imu_start;
@@ -645,20 +728,7 @@ void process_measures(MappingOutput &out)
                         break;
                     }
 
-                    double dt = time_current - time_predict_last_const;
-                    double propag_state_start = omp_get_wtime();
-                    if(!prop_at_freq_of_imu)
-                    {
-                        double dt_cov = time_current - time_update_last;
-                        if (dt_cov > 0.0)
-                        {
-                            kf_output.predict(dt_cov, Q_output, input_in, false, true);
-                            time_update_last = time_current;   
-                        }
-                    }
-                    kf_output.predict(dt, Q_output, input_in, true, false);
-                    propag_time += omp_get_wtime() - propag_state_start;
-                    time_predict_last_const = time_current;
+                    predict_state_to_group();
                     double t_update_start = omp_get_wtime();
 
                     if (feats_down_size < 1)
@@ -687,12 +757,7 @@ void process_measures(MappingOutput &out)
                         }
                     }
 
-                    for (int j = 0; j < time_seq[k]; j++)
-                    {
-                        PointType &point_body_j  = feats_down_body->points[idx+j+1];
-                        PointType &point_world_j = feats_down_world->points[idx+j+1];
-                        pointBodyToWorld(&point_body_j, &point_world_j);
-                    }
+                    transform_group_points();
                 
                     solve_time += omp_get_wtime() - solve_start;
     
