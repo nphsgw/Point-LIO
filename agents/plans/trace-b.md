@@ -176,7 +176,7 @@ B(C++)の `pointlio_offline` に、仕様のトレース(`trace.bin`。完全と
 どの手順も、5節の「手順」の列の行をテストとして先に書き、Red を確かめてから実装する。手順2〜7は、その段階のペイロードの読み手を `trace_format.py` に足し、段階の項目が欠けた記録を落とすこと(Red)を先に確かめる。B の本体(`src/`・`include/`)を変えた手順は、その終わりに完了条件1を両 bag で確かめる。手順10〜13で記録に漏れ(仕様 §5.3「第4.4節に足す」)や、くくり出しの不足が見つかったら、止めて報告する(仕様の変更は人の承認が要る)。
 
 - [x] 手順0 基準(`d73a7ac`。下の「手順0の実施記録」): 改造の直前の B(`3747389`)で、両 bag の `pointlio_offline` を `OMP_NUM_THREADS=1` で実行し、`~/data/slamrun-runs/trace-base-3747389` に置く。`bl001-post-d8290e9`(未設定)とビット一致するかも記録する。同じ B の ROS の実行を、`OMP_NUM_THREADS=1 eval/run_cpp.sh` で両 bag 10回ずつ取り、`~/data/slamrun-runs/trace-base-ros-3747389` に置いて T8 の基準にする(手順は ros-free-harness.md の手順0と同じ)。10回の `traj.tum` と `odom` がビット一致したときだけ run01 を基準にし、一致しなければ止めて報告する(要確認4)。T8 の幅は `check_runs.py` の `TAU`(A の `tau_harness`)をそのまま使う。使ったイメージの ID を記録し、以後の比較で同じイメージを使う
-- [ ] 手順1 段階のくくり出しと、`Q_output`・`P_init_output` を取り出す関数(3.5)。記録はまだ入れない
+- [x] 手順1 段階のくくり出しと、`Q_output`・`P_init_output` を取り出す関数(3.5)。記録はまだ入れない(`0c36973`。下の「手順1の実施記録」)
 - [ ] 手順2 土台: xxHash64(C++ と Python)、書き手(先頭、レコード、終わりのレコード、識別子、終了コード、間引かない引数)、正規の並び、形式の検証器(先頭と終わりのレコード)、`--trace` の引数、`run_trace.sh`(任意の PLIN を含む)、合成の PLIN の切り出し(長さは仮に決める)、`trace_preprocess_dump`、CMake。先頭と終わりのレコードだけを書く。読みの速さを測る(要確認1)
 - [ ] 手順3 S1a・S1b・S2a・S2b
 - [ ] 手順4 S3a・S3b・S3c と地図の要約
@@ -242,3 +242,24 @@ Claude Code が実行した。改造の直前の B(`3747389`)を、変更のな�
 - ファイル駆動: `~/data/slamrun-runs/trace-base-3747389/<ID>`。両 bag とも、`traj.tum`・`odom.bin`・`cloud.bin`・`cloud_frames.txt`・`params.txt` の SHA256 が、`OMP_NUM_THREADS` 未設定の `bl001-post-d8290e9` と一致した(要確認4: スレッド数を 1 にしても出力は変わらない)。
 - ROS の経路(T8 の基準): `~/data/slamrun-runs/trace-base-ros-3747389/<ID>/run01`〜`run10`。両 bag とも10回の `traj.tum` の SHA256 が一致した(avia `9bae6cd8c014a6a1…`・487 姿勢、ouster `a0752eec20114462…`・1985 姿勢。どちらもファイル駆動の `traj.tum` と同じ値)。`lidar loop back`・`imu loop back` は全回0件。run01 を T8 の基準にする(要確認4 の条件を満たした)。
 - ouster の最初の run07 は、`odom.bag` と `cloud.bag` がどちらもヘッダだけ(4117 バイト)で、`traj.tum` が0行だった。`node.log` は成功した回と同じ行数・内容で、ノードは IMU の初期化まで進んでいた。原因は確かめていない(`rosbag record` が購読に失敗した可能性があるが、推測)。記録は `run07-failed` に残し、人の判断で同じ条件で取り直した。取り直した run07 はほかの9回と一致した。実行の手順(`eval/run_cpp.sh`)の問題の候補として報告する(B の挙動ではない)。
+
+## 手順1の実施記録(2026-11-03)
+
+Codex が実装し、Claude Code がレビューした(codex-handoff.md §4)。実装は `0c36973`。
+
+- くくり出した関数(`src/mapping_core.h` に宣言): S1b `first_frame_init`、S2b `downsample_frame`、S3b `init_attitude`、S3c `init_map_frame`、S0 `group_begin`(前半、`is_first_frame` の処理)と `advance_imu_queue`(後半、待ち行列の送り)、S4i `predict_state_to_imu`、S5 `predict_cov_to_imu`、S4g `predict_state_to_group`、S7 の後の点の変換 `transform_group_points`。`get_Q_output`・`get_P_init_output`。`kf_input` の経路と、`time_seq.size() > 0` の偽の側は変えていない。
+- S5 は S6 と同じ `if (dt_cov > 0.0)` の中にあったので、S5 を `bool predict_cov_to_imu()`(予測したときに真)にし、S6 は呼び出し側に残した。演算と代入の順は変えていない。
+- 道具を書くときの注意: 次の条件と分岐は呼び出し側に残っている。行を並べ替えずには関数に入れられない(S0 の条件は S4i〜S6 のループも囲む)ので、道具は同じ条件を本体と同じ形で書く。
+  - `time_current` の計算(`group_begin` の前)。仕様 §4.3 で S0 の入口の項目なので、関数の外に置いた
+  - `advance_imu_queue` を呼ぶ条件 `imu_en && !imu_deque.empty()` と、その中の S4i〜S6 のループ
+  - S7 の更新の成否の分岐(成功したときだけ `transform_group_points` を呼ぶ)
+- 検証(Claude Code が作業ツリーで実行):
+  - くくり出しの不変: 両 bag とも、`OMP_NUM_THREADS=1 eval/run_offline.sh` の5つの出力ファイルが手順0の基準とビット一致した。`image_id` は手順0と同じ。
+  - Red: `35b601d` の写しで S4g の `dt` に 1 ulp を足したビルドでは、avia の `traj.tum`(153 行目)、`odom.bin`、`cloud.bin` が基準と食い違った(`params.txt`、`cloud_frames.txt` は一致)。
+  - ROS ノードを含む全体のビルドが通り、警告は基準のビルドと同じ。`run_cpp_tests.sh`(T5・T6・T13)、`run_math_tests.sh`、`run_math_golden.sh check`、`check_docs.py` はすべて終了0。
+  - 最後の差し戻しはヘッダのコメントだけで、`src/laserMapping.cpp` が検証した版とバイト一致することを確かめた(ビット一致は取り直していない)。
+- レビュー(R3 は文脈を持たない subagent。2回):
+  - 1回目: 必須0件、推奨1件、軽微3件。推奨は `group_begin` が `time_current` の計算(元の 566〜568 行)を含み、仕様 §3.1・§4.3 の S0 の境界(570 行から)と合わないこと。原因は指示書の誤り。直した。軽微(コメント3件)も直した。
+  - 2回目: 必須0件、軽微2件。`group_begin` のコメントが待ち行列の送りを含むと書いていた点を直した。呼び出し側に残る条件の件は、上の「道具を書くときの注意」に記録した(コードは変えない)。
+  - 差し戻しは2回。Codex の報告で、編集と実行を1つのコマンドで走らせた分が分けて書かれていなかった(2回。実質の問題はない)。
+- 未検証: ROS の経路の T8(手順17で走らせる)。
